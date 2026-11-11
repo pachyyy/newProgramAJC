@@ -215,10 +215,8 @@
                                         <th scope="col">Ket. Perk</th>
                                         <th scope="col">Lawan</th>
                                         <th scope="col">Ket. Lawan</th>
-                                        <th scope="col">Sumber</th>
                                         <th scope="col" class="num">Jumlah</th>
                                         <th scope="col">Keterangan</th>
-                                        <th scope="col" class="num">Giro Rp</th>
                                         <th scope="col">Costing</th>
                                         <th scope="col">Sub Cost</th>
                                         <th scope="col">Actions</th>
@@ -465,17 +463,6 @@
                                         </div>
                                     </div>
 
-                                    <div class="row kas-row-tight">
-                                        <div class="col-md-12">
-                                            <div class="form-check form-group text-left">
-                                                <input class="form-check-input" type="checkbox" value=""
-                                                    id="checkBoxSKB" onclick="onclickPSKB()">
-                                                <label class="form-check-label" for="flexCheckDefault">
-                                                    pSKB
-                                                </label>
-                                            </div>
-                                        </div>
-                                    </div>
                                     <div class="row kas-row-tight" id="rowCosting">
                                         <div class="col-md-4">
                                             <div class="form-group">

@@ -1089,7 +1089,7 @@ WHERE KODESUPP= :custsupp and IDuser= :username", ["custsupp" => $req->custsupp 
           $req->notitipan ? $req->notitipan : '',
           $req->uruttitipan,
           $req->keterangandetail ? $req->keterangandetail : '', // 50
-          $req->pSKB,
+          0, // untuk input pskb biar parameternya sama jumlahnya
 
         ]);
       // }

@@ -1105,7 +1105,7 @@ $data['Kurs_'],
           $req->notitipan ? $req->notitipan : '',
           $req->uruttitipan,
           $req->keterangandetail ? $req->keterangandetail : '', // 50
-          $req->pSKB,
+          0, // untuk input pskb biar parameternya sama jumlahnya
 
         ]);
 

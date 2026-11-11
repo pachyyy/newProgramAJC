@@ -165,10 +165,8 @@
                                           <th scope="col">Ket. Perk</th>
                                           <th scope="col">Lawan</th>
                                           <th scope="col">Ket. Lawan</th>
-                                          <th scope="col">Sumber</th>
                                           <th scope="col" class="num">Jumlah</th>
                                           <th scope="col">Keterangan</th>
-                                          <th scope="col" class="num">Giro Rp</th>
                                           <th scope="col">Costing</th>
                                           <th scope="col">Sub Cost</th>
                                       </tr>

@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\UsersController;
 use App\Http\Controllers\GlobalController;
 use App\Http\Controllers\HeaderTableController;
+use App\Http\Controllers\UserFilterController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\NewSetupPeriodeKerjaController;
 use App\Http\Controllers\MasterSatuanController;
@@ -59,6 +60,9 @@ Route::get('/getmenureport/{headermenu}', [HomeController::class, 'getMenuReport
 Route::post('/getheadertable', [HeaderTableController::class, 'getHeaderTable'])->middleware('auth');
 Route::post('/saveheadertable', [HeaderTableController::class, 'saveHeaderTable'])->middleware('auth');
 Route::get('/savesetheadertable', [HeaderTableController::class, 'saveSetHeaderTable'])->middleware('auth');
+// filter modal tersimpan per user (public/js/user-filter.js)
+Route::get('/userfilter_get', [UserFilterController::class, 'get'])->middleware('auth');
+Route::post('/userfilter_save', [UserFilterController::class, 'save'])->middleware('auth');
 
 Route::get('/setperiode', [NewSetupPeriodeKerjaController::class, 'index'])->middleware('auth');
 Route::post('/newsetupperiodekerjaupdate', [NewSetupPeriodeKerjaController::class, 'updatePeriodeKerja'])->middleware('auth');

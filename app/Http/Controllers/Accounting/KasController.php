@@ -2,6 +2,7 @@
 
 // namespace App\Http\Controllers;
 namespace App\Http\Controllers\Accounting;
+
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Model\NewMenu;
@@ -11,17 +12,18 @@ use App\Model\NewPeriode;
 use App\Model\NewUsers;
 use App\Services\OtorisasiService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class KasController extends Controller
 {
 
-  // Satu rentang tanggal dipakai baik oleh index() (first load) maupun loadAll() (AJAX reload
-  // dari date picker Periode di toolbar). A.Tanggal dipakai dengan rentang setengah-terbuka
-  // [date1, date2+1hari) supaya baris yang timestamp-nya persis di tanggal akhir tidak ikut
-  // terbuang, sama seperti PengajuanDPHController::fetchList() / BankController::fetchList().
-  private function fetchList(string $date1, string $date2)
-  {
-    return DB::connection("SML")->select("
+    // Satu rentang tanggal dipakai baik oleh index() (first load) maupun loadAll() (AJAX reload
+    // dari date picker Periode di toolbar). A.Tanggal dipakai dengan rentang setengah-terbuka
+    // [date1, date2+1hari) supaya baris yang timestamp-nya persis di tanggal akhir tidak ikut
+    // terbuang, sama seperti PengajuanDPHController::fetchList() / BankController::fetchList().
+    private function fetchList(string $date1, string $date2)
+    {
+        return DB::connection("SML")->select("
 select  A.NoUrut, A.NoBukti, A.Tanggal, A.Note, '' Devisi, A.PerkiraanHd Perkiraan, A.TipeTransHd,
         sum(case when B.Valas='IDR' then 0.00 else B.Debet+B.Kredit end) TotalD,
         sum((B.Debet+B.Kredit)*B.Kurs) TotalRp,
@@ -44,63 +46,65 @@ Order by A.Nobukti
 
 
 
-",[
-      "date1" => $date1,
-      "date2" => date('Y-m-d', strtotime($date2 . ' +1 day')),
-    ]);
-  }
-
-  public function index(Request $req) {
-    $kodemenu = '02011';
-
-    $akses = app('App\Http\Controllers\GlobalController')->getAkses($kodemenu, $req->path());
-    // $akses = DBFLMENU::where('USERID', \Auth::user()->username)-> where('L1', $kodemenu)->first();
-    if(!$akses || !$akses->HASACCESS) {
-       return redirect('/home');
+", [
+            "date1" => $date1,
+            "date2" => date('Y-m-d', strtotime($date2 . ' +1 day')),
+        ]);
     }
 
-    $periode = app('App\Http\Controllers\GlobalController')->getPeriode();
+    public function index(Request $req)
+    {
+        $kodemenu = '02011';
 
-    $menul0 = app('App\Http\Controllers\NewMenuController')->getMenuL0(5);
+        $akses = app('App\Http\Controllers\GlobalController')->getAkses($kodemenu, $req->path());
+        // $akses = DBFLMENU::where('USERID', \Auth::user()->username)-> where('L1', $kodemenu)->first();
+        if (!$akses || !$akses->HASACCESS) {
+            return redirect('/home');
+        }
 
-    $date1 = date('Y-m-01', mktime(0, 0, 0, $periode->bulan, 1, $periode->tahun));
-    $date2 = date('Y-m-d');
+        $periode = app('App\Http\Controllers\GlobalController')->getPeriode();
 
-    $tempOutstanding = $this->fetchList($date1, $date2);
+        $menul0 = app('App\Http\Controllers\NewMenuController')->getMenuL0(5);
 
+        $date1 = date('Y-m-01', mktime(0, 0, 0, $periode->bulan, 1, $periode->tahun));
+        $date2 = date('Y-m-d');
 
-// $listCustSuppX = DB::connection('SML')->select("select A.KODECUSTSUPP, A.NAMACUSTSUPP, A.ALAMAT, A.NAMAKOTA, A.ALAMATKOTA, A.PPN, A.Hari, ISNULL(a.agent, '') Agent
-// from vwBrowsCustSupp A
-// where A.Perkiraan='21203'
-// order by A.KodeCustSupp");
+        $tempOutstanding = $this->fetchList($date1, $date2);
 
 
-    return view('accounting.kas' , [
-      "menul0" => $menul0,
-      "periode" => $periode,
-      "date1" => $date1,
-      "date2" => $date2,
-      "listCustSuppX" =>[],
-      "tempOutstanding" => $tempOutstanding,
-      "akses" => $akses
-    ]);
+        // $listCustSuppX = DB::connection('SML')->select("select A.KODECUSTSUPP, A.NAMACUSTSUPP, A.ALAMAT, A.NAMAKOTA, A.ALAMATKOTA, A.PPN, A.Hari, ISNULL(a.agent, '') Agent
+        // from vwBrowsCustSupp A
+        // where A.Perkiraan='21203'
+        // order by A.KodeCustSupp");
 
-  }
-  public function listTunaiX (Request $req) {
-    return $this->tunaiRows($req->nobukti ?? '');
-  }
 
-  /* Isi modal Pelunasan Hutang/Piutang dari dbTempHutPiut user ini, dipakai listTunai() (saat
+        return view('accounting.kas', [
+            "menul0" => $menul0,
+            "periode" => $periode,
+            "date1" => $date1,
+            "date2" => $date2,
+            "listCustSuppX" => [],
+            "tempOutstanding" => $tempOutstanding,
+            "akses" => $akses
+        ]);
+    }
+    public function listTunaiX(Request $req)
+    {
+        return $this->tunaiRows($req->nobukti ?? '');
+    }
+
+    /* Isi modal Pelunasan Hutang/Piutang dari dbTempHutPiut user ini, dipakai listTunai() (saat
      customer/supplier dipilih) dan listTunaiX() (refresh) supaya bentuknya selalu sama:
        - Baris 'F': satu baris per faktur, Debet/Kredit = jumlah semua barisnya KECUALI pelunasan
          bukti ini; NoRetur/NoBukti/Tanggal/Valas/Kurs dari baris pertama faktur (Urut terkecil).
        - Baris 'L': pelunasan milik bukti ini (StatusUID 'I'), baris mentah (select *) tepat di
          bawah fakturnya - dipakai apa adanya oleh spTempHutPiut 'D' saat dibatalkan.
      Juga dipakai BankController (dbTempHutPiut yang sama). */
-  public function tunaiRows ($nobukti) {
-    $username = \Auth::user()->username;
+    public function tunaiRows($nobukti)
+    {
+        $username = \Auth::user()->username;
 
-    $listFaktur = DB::connection('SML')->select("
+        $listFaktur = DB::connection('SML')->select("
     select g.NoFaktur, g.KodeCustSupp, f.NoRetur, f.NoBukti, f.Tanggal, g.Debet, g.Kredit, f.Valas, f.Kurs,
       0 Urut, '' MyID
     from
@@ -118,45 +122,48 @@ Order by A.Nobukti
     order by g.NoFaktur, g.KodeCustSupp
     ", ["username1" => $username, "nobukti" => $nobukti, "username2" => $username]);
 
-    $listLunas = DB::connection('SML')->select("select *, '' MyID from dbTempHutPiut
+        $listLunas = DB::connection('SML')->select("select *, '' MyID from dbTempHutPiut
     where IDUSER = :username and NoBukti = :nobukti and StatusUID = 'I'
     order by NoFaktur, Urut
     ", ["username" => $username, "nobukti" => $nobukti]);
 
-    $lunasPerFaktur = [];
-    foreach ($listLunas as $l) {
-      $l->Baris = 'L';
-      $lunasPerFaktur[$l->NoFaktur . '|' . $l->KodeCustSupp][] = $l;
+        $lunasPerFaktur = [];
+        foreach ($listLunas as $l) {
+            $l->Baris = 'L';
+            $lunasPerFaktur[$l->NoFaktur . '|' . $l->KodeCustSupp][] = $l;
+        }
+
+        $hasil = [];
+        foreach ($listFaktur as $f) {
+            $f->Baris = 'F';
+            $hasil[] = $f;
+            $kunci = $f->NoFaktur . '|' . $f->KodeCustSupp;
+            foreach ($lunasPerFaktur[$kunci] ?? [] as $l) {
+                $hasil[] = $l;
+            }
+        }
+
+        return $hasil;
     }
 
-    $hasil = [];
-    foreach ($listFaktur as $f) {
-      $f->Baris = 'F';
-      $hasil[] = $f;
-      $kunci = $f->NoFaktur . '|' . $f->KodeCustSupp;
-      foreach ($lunasPerFaktur[$kunci] ?? [] as $l) {
-        $hasil[] = $l;
-      }
-    }
+    public function listCustSuppTunai(Request $req)
+    {
 
-    return $hasil;
-  }
-
-  public function listCustSuppTunai (Request $req) {
-
-    $listCustSuppX = DB::connection('SML')->select("select A.KODECUSTSUPP, A.NAMACUSTSUPP, A.ALAMAT, A.NAMAKOTA, A.ALAMATKOTA, A.PPN, A.Hari, ISNULL(a.agent, '') Agent
+        $listCustSuppX = DB::connection('SML')->select("select A.KODECUSTSUPP, A.NAMACUSTSUPP, A.ALAMAT, A.NAMAKOTA, A.ALAMATKOTA, A.PPN, A.Hari, ISNULL(a.agent, '') Agent
     from vwBrowsCustSupp A
     where A.Perkiraan= :lawan
-    order by A.KodeCustSupp" , ["lawan" => $req->lawan]);
+    order by A.KodeCustSupp", ["lawan" => $req->lawan]);
 
-    return $listCustSuppX;
-  }
+        return $listCustSuppX;
+    }
 
-  public function listTunai (Request $req) {
+    public function listTunai(Request $req)
+    {
 
-$username = \Auth::user()->username;
-DB::connection('SML')->statement("delete from dbTempHutPiut where IDUSER = :username",["username"=>$username] );
-DB::connection('SML')->statement("
+        $username = \Auth::user()->username;
+        DB::connection('SML')->statement("delete from dbTempHutPiut where IDUSER = :username", ["username" => $username]);
+        DB::connection('SML')->statement(
+            "
 declare @NoBukti varchar(30), @KodeCustSupp varchar(30)  , @username varchar(30) , @agent varchar (50) , @lawan varchar(30) -- dr dbcustsupp
 
 select @NoBukti = :nobukti , @KodeCustSupp = :kodecustsupp , @username = :username, @agent = :agent, @lawan = :lawan
@@ -189,54 +196,55 @@ where Y.KodeCustSupp in (select KodeCustSupp from dbCustSupp where KodeCustSupp=
 and Y.NoBukti+right('0000'+cast(Y.NoMsk as varchar(4)),4)<> @NoBukti
  and y.KodeCustSupp=@KodeCustSupp
 ",
-  // agent kosong ('') diubah Laravel (ConvertEmptyStringsToNull) jadi NULL, dan dengan @agent NULL
-  // query ini mengembalikan 0 baris - jadi supplier tanpa agent selalu "Tidak ada transaksi".
-  // Kirim '' seperti saat query dijalankan langsung di SQL Server.
-  ["nobukti" => $req->nobukti , "kodecustsupp" => $req->kodecustsupp , "username" => $username , "agent" => $req->agent ?? '' , "lawan" => $req->lawan]
-);
+            // agent kosong ('') diubah Laravel (ConvertEmptyStringsToNull) jadi NULL, dan dengan @agent NULL
+            // query ini mengembalikan 0 baris - jadi supplier tanpa agent selalu "Tidak ada transaksi".
+            // Kirim '' seperti saat query dijalankan langsung di SQL Server.
+            ["nobukti" => $req->nobukti, "kodecustsupp" => $req->kodecustsupp, "username" => $username, "agent" => $req->agent ?? '', "lawan" => $req->lawan]
+        );
 
 
-  // nobukti di atas = NoBukti + NoUrut (filter vwHutPiut); nobuktiview = NoBukti saja, sama
-  // seperti yang dikirim refresh (listTunaiX) - lihat tunaiRows().
-  return $this->tunaiRows($req->nobuktiview ?? '');
-
-  }
-
-
-  public function loadAll (Request $req) {
-
-
-    $periode = app('App\Http\Controllers\GlobalController')->getPeriode();
-
-    $date1 = $req->input('date1');
-    $date2 = $req->input('date2');
-    if (!$date1 || !$date2) {
-        $date1 = date('Y-m-01', mktime(0, 0, 0, $periode->bulan, 1, $periode->tahun));
-        $date2 = date('Y-m-d');
+        // nobukti di atas = NoBukti + NoUrut (filter vwHutPiut); nobuktiview = NoBukti saja, sama
+        // seperti yang dikirim refresh (listTunaiX) - lihat tunaiRows().
+        return $this->tunaiRows($req->nobuktiview ?? '');
     }
 
-    return ["tempOutstanding" => $this->fetchList($date1, $date2)];
-  }
 
-  public function getDetailCetak(Request $req)
-  {
-      $noBukti = $req->input('NOBUKTI');
-
-      $cetak = DB::connection("SML")->select(
-          "EXEC dbo.CetakKasharian ?",
-          [$noBukti]
-      );
-
-      $tempCetak1 = [];
-      foreach ($cetak as $p) {
-          array_push($tempCetak1, $p);
-      }
-
-      return $tempCetak1;
-  }
+    public function loadAll(Request $req)
+    {
 
 
-  public function getDetail (Request $req ) {
+        $periode = app('App\Http\Controllers\GlobalController')->getPeriode();
+
+        $date1 = $req->input('date1');
+        $date2 = $req->input('date2');
+        if (!$date1 || !$date2) {
+            $date1 = date('Y-m-01', mktime(0, 0, 0, $periode->bulan, 1, $periode->tahun));
+            $date2 = date('Y-m-d');
+        }
+
+        return ["tempOutstanding" => $this->fetchList($date1, $date2)];
+    }
+
+    public function getDetailCetak(Request $req)
+    {
+        $noBukti = $req->input('NOBUKTI');
+
+        $cetak = DB::connection("SML")->select(
+            "EXEC dbo.CetakKasharian ?",
+            [$noBukti]
+        );
+
+        $tempCetak1 = [];
+        foreach ($cetak as $p) {
+            array_push($tempCetak1, $p);
+        }
+
+        return $tempCetak1;
+    }
+
+
+    public function getDetail(Request $req)
+    {
         $tempOutstanding = DB::connection("SML")->select("
 
         declare @NoBukti varchar(30)
@@ -362,91 +370,96 @@ and Y.NoBukti+right('0000'+cast(Y.NoMsk as varchar(4)),4)<> @NoBukti
 
 
 
-" , ["nobukti" => $req->nobukti]);
-    return $tempOutstanding;
-  }
+", ["nobukti" => $req->nobukti]);
+        return $tempOutstanding;
+    }
 
 
-  // Dipakai juga oleh route bankgetnourutaktiva. Selain no. urut berikutnya, ikut mengembalikan
-  // setting aktiva TERAKHIR (NoBelakang terbesar) di group ini sebagai nilai awal form aktiva baru.
-  // MAX() dan kolom setting dipisah (subquery + OUTER APPLY) karena kolom biasa tidak boleh
-  // dicampur dengan agregat tanpa GROUP BY; OUTER APPLY tetap mengembalikan 1 baris (kolom
-  // setting NULL) bila group ini belum punya aktiva.
-  public function getNoUrutAktiva (Request $req) {
-    $nourut = DB::connection('SML')->select("SELECT RIGHT('00000' + (CAST(ISNULL(M.MaxNo, 0) + 1 AS VARCHAR(10))), 5) AS NoUrut,
+    // Dipakai juga oleh route bankgetnourutaktiva. Selain no. urut berikutnya, ikut mengembalikan
+    // setting aktiva TERAKHIR (NoBelakang terbesar) di group ini sebagai nilai awal form aktiva baru.
+    // MAX() dan kolom setting dipisah (subquery + OUTER APPLY) karena kolom biasa tidak boleh
+    // dicampur dengan agregat tanpa GROUP BY; OUTER APPLY tetap mengembalikan 1 baris (kolom
+    // setting NULL) bila group ini belum punya aktiva.
+    public function getNoUrutAktiva(Request $req)
+    {
+        $nourut = DB::connection('SML')->select("SELECT RIGHT('00000' + (CAST(ISNULL(M.MaxNo, 0) + 1 AS VARCHAR(10))), 5) AS NoUrut,
        L.Persen, L.Tipe, L.Akumulasi, L.Biaya, L.PersenBiaya1, L.Biaya2, L.PersenBiaya2, L.biaya3, L.persenbiaya3
 FROM (SELECT MAX(CONVERT(int, NoBelakang)) AS MaxNo FROM dbAktiva WHERE nomuka = :nomuka) M
 OUTER APPLY (
   SELECT TOP 1 Persen, Tipe, Akumulasi, Biaya, PersenBiaya1, Biaya2, PersenBiaya2, biaya3, persenbiaya3
   FROM dbAktiva WHERE nomuka = :nomuka2
   ORDER BY CONVERT(int, NoBelakang) DESC
-) L " , ["nomuka" => $req->nomuka, "nomuka2" => $req->nomuka]);
+) L ", ["nomuka" => $req->nomuka, "nomuka2" => $req->nomuka]);
 
-  return $nourut;
-  }
+        return $nourut;
+    }
 
-  public function getNoBukti (Request $req) {
-    // return 1;
-    $username = \Auth::user()->username;
-    $periode = app('App\Http\Controllers\GlobalController')->getPeriode();
+    public function getNoBukti(Request $req)
+    {
+        // return 1;
+        $username = \Auth::user()->username;
+        $periode = app('App\Http\Controllers\GlobalController')->getPeriode();
 
-    $kode = $req->kode;
-    $inisial = DB::connection("SML")->select('select ' . $kode . ' from DBNOMOR');
-    // $inisialx = 'KN';
-    // return $inisialx;
-    $values = [
-        $inisial[0]->$kode,
-        $periode[0]->bulan,
-        $periode[0]->tahun,
-        $username,
-        $req->simbol
-    ];
+        $kode = $req->kode;
+        $inisial = DB::connection("SML")->select('select ' . $kode . ' from DBNOMOR');
+        // $inisialx = 'KN';
+        // return $inisialx;
+        $values = [
+            $inisial[0]->$kode,
+            $periode[0]->bulan,
+            $periode[0]->tahun,
+            $username,
+            $req->simbol
+        ];
 
-    $noBukti = DB::connection('SML')->select('exec SP_IsiNobuktiSimbol ?,?,?,?,?',$values);
+        $noBukti = DB::connection('SML')->select('exec SP_IsiNobuktiSimbol ?,?,?,?,?', $values);
 
-    return $noBukti;
-  }
+        return $noBukti;
+    }
 
-  public function changeKembaliUang (Request $req) {
-    // return 1;
-    $username = \Auth::user()->username;
-    $periode = app('App\Http\Controllers\GlobalController')->getPeriode();
+    public function changeKembaliUang(Request $req)
+    {
+        // return 1;
+        $username = \Auth::user()->username;
+        $periode = app('App\Http\Controllers\GlobalController')->getPeriode();
 
-    // return $values = [
-    //     $req->kembaliUang,
-    //     $req->nobukti,
-    //     $req->nobon,
-    //     $username
-    // ];
+        // return $values = [
+        //     $req->kembaliUang,
+        //     $req->nobukti,
+        //     $req->nobon,
+        //     $username
+        // ];
 
-    $values = [
-        $req->kembaliUang,
-        $req->nobukti,
-        $req->nobon,
-        $username
-    ];
+        $values = [
+            $req->kembaliUang,
+            $req->nobukti,
+            $req->nobon,
+            $username
+        ];
 
-    $noBukti = DB::connection('SML')->update('exec sp_BonKembaliUang ?,?,?,?',$values);
+        $noBukti = DB::connection('SML')->update('exec sp_BonKembaliUang ?,?,?,?', $values);
 
-    return 1;
-  }
+        return 1;
+    }
 
 
-  public function listKasHeader (Request $req) {
+    public function listKasHeader(Request $req)
+    {
 
-    // $listData = DB::connection('SML')->select("select Perkiraan, Keterangan , Simbol from DBPERKIRAAN where Perkiraan like '1111%' and Tipe = 1");
-    $listData = DB::connection('SML')->select("select a.Perkiraan, a.Keterangan , a.Simbol from DBPERKIRAAN a
+        // $listData = DB::connection('SML')->select("select Perkiraan, Keterangan , Simbol from DBPERKIRAAN where Perkiraan like '1111%' and Tipe = 1");
+        $listData = DB::connection('SML')->select("select a.Perkiraan, a.Keterangan , a.Simbol from DBPERKIRAAN a
 left outer join DBPOSTHUTPIUT b on a.Perkiraan=b.Perkiraan
 where b.Kode='KAS'");
 
 
-    return $listData;
-  }
+        return $listData;
+    }
 
-  public function listBon (Request $req) {
+    public function listBon(Request $req)
+    {
 
-    // $listData = DB::connection('SML')->select("select Perkiraan, Keterangan , Simbol from DBPERKIRAAN where Perkiraan like '1111%' and Tipe = 1");
-    $listData = DB::connection('SML')->select("Select 	 A.NoBukti, A.Penerima, A.Keterangan, A.Debet-SUM(isnull(B.Kredit,0)) Debet,a.Perkiraan
+        // $listData = DB::connection('SML')->select("select Perkiraan, Keterangan , Simbol from DBPERKIRAAN where Perkiraan like '1111%' and Tipe = 1");
+        $listData = DB::connection('SML')->select("Select 	 A.NoBukti, A.Penerima, A.Keterangan, A.Debet-SUM(isnull(B.Kredit,0)) Debet,a.Perkiraan
  From    dbBon A
  Left Outer Join dbBon B on B.NoBukti=A.NoBukti and B.Perkiraan=A.Perkiraan and B.Kredit<>0
  where   A.Perkiraan = :kodeperkiraan
@@ -456,32 +469,35 @@ where b.Kode='KAS'");
          A.Debet, A.Perkiraan, A.KodeVls, A.Kurs, A.DebetD,
          A.TglInput, A.UserID, A.Urut, A.BuktiKas, A.UrutKas
  Having  SUM(isnull(B.Kredit,0))<A.Debet
- Order by A.Tanggal, A.NoBukti" , ["kodeperkiraan" => $req->kodeperkiraan]);
+ Order by A.Tanggal, A.NoBukti", ["kodeperkiraan" => $req->kodeperkiraan]);
 
 
-    return $listData;
-  }
-
-
-
-  public function listValas (Request $req) {
-
-    $listData = DB::connection('SML')->select("select * from DBVALAS");
-    return $listData;
-  }
+        return $listData;
+    }
 
 
 
-  public function listDevisi (Request $req) {
+    public function listValas(Request $req)
+    {
 
-    $listData = DB::connection('SML')->select("select Devisi, NamaDevisi from dbdevisi");
-    return $listData;
-  }
+        $listData = DB::connection('SML')->select("select * from DBVALAS");
+        return $listData;
+    }
 
 
-  public function listPTHT (Request $req) {
 
-    $listData = DB::connection('SML')->select("select D.Nobukti,e.NOBUKTI NOUM,A.KODECUSTSUPP,C.NAMACUSTSUPP
+    public function listDevisi(Request $req)
+    {
+
+        $listData = DB::connection('SML')->select("select Devisi, NamaDevisi from dbdevisi");
+        return $listData;
+    }
+
+
+    public function listPTHT(Request $req)
+    {
+
+        $listData = DB::connection('SML')->select("select D.Nobukti,e.NOBUKTI NOUM,A.KODECUSTSUPP,C.NAMACUSTSUPP
                           ,D.Valas,Sum(A.DIBAYAR) DIBAYAR ,X.KL,SUM(LB) LB
                                from DBDPHDET A
                            Left Outer Join dbTransaksi B on A.NoBukti=B.NODPH and A.KodeCUstSupp=B.CustSUppP
@@ -500,13 +516,41 @@ where b.Kode='KAS'");
                                           else 1
                                      end As Bit)=0   --and E.nobukti is null
                             group by D.Nobukti,A.KODECUSTSUPP,C.NAMACUSTSUPP,E.nobukti
-                          ,D.Valas,X.kl" , ["tipe" => $req->tipe , "valas" => $req->valas ]);
-    return $listData;
-  }
+                          ,D.Valas,X.kl", ["tipe" => $req->tipe, "valas" => $req->valas]);
+        return $listData;
+    }
 
-  public function listDPH (Request $req) {
+    public function listDPH(Request $req)
+    {
 
-    $listData = DB::connection('SML')->select("select D.Nobukti,e.NOBUKTI NOUM,A.KODECUSTSUPP,C.NAMACUSTSUPP
+        $listData = DB::connection('SML')->select("select D.Nobukti,e.NOBUKTI NOUM,A.KODECUSTSUPP,C.NAMACUSTSUPP
+                          ,D.Valas,Sum(A.DIBAYAR)  - b.DebetRp DIBAYAR ,X.KL,SUM(LB) LB
+                               from DBDPHDET A
+                           Left Outer Join (select NODPH, CustSuppP, Sum(DebetRp) DebetRp from dbTransaksi group by NODPH, CustSuppP) B on A.NoBukti=B.NODPH and A.KodeCUstSupp=B.CustSUppP
+                           Left OUter Join DBCUSTSUPP C on A.KODECUSTSUPP=C.KODECUSTSUPP
+                           Left Outer JOin DbDPH D on A.Nobukti=D.Nobukti
+                           Left Outer Join (select nobukti,KodeCustSupp,Sum(NilaiK) KL from DBKurangBayar group by  nobukti,KodeCustSupp)  X on A.nobukti=X.Nobukti and A.KodeCustSupp=X.kodeCustSupp
+                         left outer join (select nobukti,noso from dbUMjual group by nobukti,noso) E on a.nofaktur=e.nobukti
+                         left outer join (select nopohd from dbbeli group by NOPOHD) F on e.noso=f.nopohd
+                           where f.nopohd is null
+                         And D.Tipe= 'DPH'   and  D.Valas= :valas
+                           and Cast(Case when Case when D.IsOtorisasi1=1 then 1 else 0 end+
+                           Case when D.IsOtorisasi2=1 then 1 else 0 end+
+                           Case when D.IsOtorisasi3=1 then 1 else 0 end+
+                          Case when D.IsOtorisasi4=1 then 1 else 0 end+
+                                            Case when D.IsOtorisasi5=1 then 1 else 0 end=D.MaxOL then 0
+                                          else 1
+                                     end As Bit)=0   --and E.nobukti is not null
+                            group by D.Nobukti,A.KODECUSTSUPP,C.NAMACUSTSUPP,E.nobukti
+                          ,D.Valas,X.kl,  b.DebetRp
+                          having Round(Sum(A.DIBAYAR) - IsNull(Max(B.DebetRp), 0), 2) <> 0", ["valas" => $req->valas]);
+        return $listData;
+    }
+
+    public function listDPHUHT(Request $req)
+    {
+
+        $listData = DB::connection('SML')->select("select D.Nobukti,e.NOBUKTI NOUM,A.KODECUSTSUPP,C.NAMACUSTSUPP
                           ,D.Valas,Sum(A.DIBAYAR) DIBAYAR ,X.KL,SUM(LB) LB
                                from DBDPHDET A
                            Left Outer Join dbTransaksi B on A.NoBukti=B.NODPH and A.KodeCUstSupp=B.CustSUppP
@@ -525,39 +569,15 @@ where b.Kode='KAS'");
                                           else 1
                                      end As Bit)=0   --and E.nobukti is not null
                             group by D.Nobukti,A.KODECUSTSUPP,C.NAMACUSTSUPP,E.nobukti
-                          ,D.Valas,X.kl" , ["valas" => $req->valas ]);
-    return $listData;
-  }
-
-  public function listDPHUHT (Request $req) {
-
-    $listData = DB::connection('SML')->select("select D.Nobukti,e.NOBUKTI NOUM,A.KODECUSTSUPP,C.NAMACUSTSUPP
-                          ,D.Valas,Sum(A.DIBAYAR) DIBAYAR ,X.KL,SUM(LB) LB
-                               from DBDPHDET A
-                           Left Outer Join dbTransaksi B on A.NoBukti=B.NODPH and A.KodeCUstSupp=B.CustSUppP
-                           Left OUter Join DBCUSTSUPP C on A.KODECUSTSUPP=C.KODECUSTSUPP
-                           Left Outer JOin DbDPH D on A.Nobukti=D.Nobukti
-                           Left Outer Join (select nobukti,KodeCustSupp,Sum(NilaiK) KL from DBKurangBayar group by  nobukti,KodeCustSupp)  X on A.nobukti=X.Nobukti and A.KodeCustSupp=X.kodeCustSupp
-                         left outer join (select nobukti,noso from dbUMjual group by nobukti,noso) E on a.nofaktur=e.nobukti
-                         left outer join (select nopohd from dbbeli group by NOPOHD) F on e.noso=f.nopohd
-                           where B.NoBukti Is null       and f.nopohd is null
-                         And D.Tipe= 'DPH'   and  D.Valas= :valas
-                           and Cast(Case when Case when D.IsOtorisasi1=1 then 1 else 0 end+
-                           Case when D.IsOtorisasi2=1 then 1 else 0 end+
-                           Case when D.IsOtorisasi3=1 then 1 else 0 end+
-                          Case when D.IsOtorisasi4=1 then 1 else 0 end+
-                                            Case when D.IsOtorisasi5=1 then 1 else 0 end=D.MaxOL then 0
-                                          else 1
-                                     end As Bit)=0   --and E.nobukti is not null
-                            group by D.Nobukti,A.KODECUSTSUPP,C.NAMACUSTSUPP,E.nobukti
-                          ,D.Valas,X.kl             " , ["valas" => $req->valas ]);
-    return $listData;
-  }
+                          ,D.Valas,X.kl             ", ["valas" => $req->valas]);
+        return $listData;
+    }
 
 
-  public function listDPP (Request $req) {
+    public function listDPP(Request $req)
+    {
 
-    $listData = DB::connection('SML')->select("select D.Nobukti,e.NOBUKTI NOUM,A.KODECUSTSUPP,C.NAMACUSTSUPP
+        $listData = DB::connection('SML')->select("select D.Nobukti,e.NOBUKTI NOUM,A.KODECUSTSUPP,C.NAMACUSTSUPP
                           ,D.Valas,Sum(A.DIBAYAR) DIBAYAR ,X.KL,SUM(LB) LB
                                from DBDPHDET A
                            Left Outer Join dbTransaksi B on A.NoBukti=B.NODPH and A.KodeCUstSupp=B.CustSUppP
@@ -576,22 +596,24 @@ where b.Kode='KAS'");
                                           else 1
                                      end As Bit)=0 --and E.nobukti is null
                             group by D.Nobukti,A.KODECUSTSUPP,C.NAMACUSTSUPP,E.nobukti
-                          ,D.Valas,X.kl" , ["valas" => $req->valas ]);
-    return $listData;
-  }
+                          ,D.Valas,X.kl", ["valas" => $req->valas]);
+        return $listData;
+    }
 
 
 
 
-  public function listDepartemen (Request $req) {
+    public function listDepartemen(Request $req)
+    {
 
-    $listData = DB::connection('SML')->select("select * from DBDEPART");
-    return $listData;
-  }
+        $listData = DB::connection('SML')->select("select * from DBDEPART");
+        return $listData;
+    }
 
-  public function listAktiva (Request $req) {
+    public function listAktiva(Request $req)
+    {
 
-    $listData = DB::connection('SML')->select("Select A.*,B.Keterangan NamaGroupAktiva,
+        $listData = DB::connection('SML')->select("Select A.*,B.Keterangan NamaGroupAktiva,
        C.Keterangan NamaAkumulasi,
        Case when A.Tipe='L' then '[L]urus'
             when A.Tipe='M' then '[M]enurun'
@@ -604,13 +626,14 @@ left Outer join dbperkiraan c on c.perkiraan=a.Akumulasi
 Left Outer Join dbBagian d on d.kodebag=a.kodebag
 left outer join dbDevisi e on e.devisi=a.devisi
 where
- a.Nomuka= :perkiraan and a.Devisi= :devisi ", ["perkiraan" => $req->perkiraan , "devisi" => $req->devisi]);
-    return $listData;
-  }
+ a.Nomuka= :perkiraan and a.Devisi= :devisi ", ["perkiraan" => $req->perkiraan, "devisi" => $req->devisi]);
+        return $listData;
+    }
 
-  public function listAkumulasi (Request $req) {
+    public function listAkumulasi(Request $req)
+    {
 
-    $listData = DB::connection('SML')->select("Select A.Devisi,b.Namabag,A.Perkiraan, A.Keterangan,A.Tanggal, A.Tipe,
+        $listData = DB::connection('SML')->select("Select A.Devisi,b.Namabag,A.Perkiraan, A.Keterangan,A.Tanggal, A.Tipe,
  Case when A.Tipe='L' then '[L]urus'
    when A.Tipe='M' then '[M]enurun'
    when A.Tipe='P' then '[P]ajak'
@@ -625,13 +648,14 @@ where
  left outer join dbperkiraan d on d.perkiraan=a.Akumulasi and d.Tipe=1
  left outer join dbDevisi e on e.Devisi=a.Devisi
  Where A.NoMuka= :perkiraan or
- A.Akumulasi= :perkiraan2 ", ["perkiraan" => $req->perkiraan , "perkiraan2" => $req->perkiraan ]);
-    return $listData;
-  }
+ A.Akumulasi= :perkiraan2 ", ["perkiraan" => $req->perkiraan, "perkiraan2" => $req->perkiraan]);
+        return $listData;
+    }
 
-  public function listDetailAktiva (Request $req) {
+    public function listDetailAktiva(Request $req)
+    {
 
-    $listData = DB::connection('SML')->select("Select A.*,B.Keterangan NamaGroupAktiva,
+        $listData = DB::connection('SML')->select("Select A.*,B.Keterangan NamaGroupAktiva,
        C.Keterangan NamaAkumulasi,
        Case when A.Tipe='L' then '[L]urus'
             when A.Tipe='M' then '[M]enurun'
@@ -643,45 +667,47 @@ left Outer join dbPerkiraan b on b.perkiraan=a.Nomuka
 left Outer join dbperkiraan c on c.perkiraan=a.Akumulasi
 Left Outer Join dbBagian d on d.kodebag=a.kodebag
 left outer join dbDevisi e on e.devisi=a.devisi
-where a.Perkiraan= :groupaktiva   ", ["groupaktiva" => $req->groupaktiva ]);
-    return $listData;
-  }
+where a.Perkiraan= :groupaktiva   ", ["groupaktiva" => $req->groupaktiva]);
+        return $listData;
+    }
 
-  // kalo keluar dia masuk P
-  // kalo masuk masuk ke L
-  public function updateDBAktivaDet (Request $req) {
-    $check = DB::connection('SML')->select("
+    // kalo keluar dia masuk P
+    // kalo masuk masuk ke L
+    public function updateDBAktivaDet(Request $req)
+    {
+        $check = DB::connection('SML')->select("
       select Perkiraan ,  Bulan, Tahun , Devisi , md from dbaktivadet where Perkiraan = :perkiraan and Bulan = :bulan and Tahun = :tahun
-    " , ["perkiraan" => $req->perkiraan , "bulan" => $req->bulan , "tahun" => $req->tahun]);
-    if ($check) {
+    ", ["perkiraan" => $req->perkiraan, "bulan" => $req->bulan, "tahun" => $req->tahun]);
+        if ($check) {
 
-      $update = DB::connection('SML')->update("
+            $update = DB::connection('SML')->update(
+                "
 
 update DBAKTIVADET set MD = :md
-where Perkiraan = :perkiraan and Bulan = :bulan and Tahun = :tahun " ,
-["MD" => $req->md + $check[0]['MD'] ,  "perkiraan" => $req->perkiraan , "bulan" => $req->bulan , "tahun" => $req->tahun]
-);
-
-    } else {
-      $add = DB::connection('SML')->statement("
+where Perkiraan = :perkiraan and Bulan = :bulan and Tahun = :tahun ",
+                ["MD" => $req->md + $check[0]['MD'],  "perkiraan" => $req->perkiraan, "bulan" => $req->bulan, "tahun" => $req->tahun]
+            );
+        } else {
+            $add = DB::connection('SML')->statement(
+                "
       insert into DBAKTIVADET (Perkiraan , Bulan, Tahun , Devisi , Valas , Kurs , Awal , AwalSusut , MD , DMD , MK , DMK , SD , DSD , SK , DSK )
 values ( :perkiraan , :bulan , :tahun , :devisi  , :valas , :kurs , 0 , 0 , :md , 0 , 0 , 0 , 0 , 0 , 0 , 0 )
       ",
-    [
-      "perkiraan" => $req->perkiraan ,
-      "bulan" => $req->bulan ,
-      "tahun" => $req->tahun ,
-      "devisi" => $req->devisi ,
-      "valas" => $req->valas ,
-      "kurs" => $req->kurs ,
-      "MD" => $req->md ,
-    ]);
-
+                [
+                    "perkiraan" => $req->perkiraan,
+                    "bulan" => $req->bulan,
+                    "tahun" => $req->tahun,
+                    "devisi" => $req->devisi,
+                    "valas" => $req->valas,
+                    "kurs" => $req->kurs,
+                    "MD" => $req->md,
+                ]
+            );
+        }
     }
 
-  }
-
-  public function listLawan (Request $req) {
+    public function listLawan(Request $req)
+    {
 
         $username = \Auth::user()->username;
         $listData = [];
@@ -694,16 +720,17 @@ values ( :perkiraan , :bulan , :tahun , :devisi  , :valas , :kurs , 0 , 0 , :md 
                        left outer join (select COUNT(kodecost) iscost , perkiraan from DBPERKCOST group by Perkiraan) D on a.Perkiraan = D.perkiraan
                       where a.Tipe=1 and a.Perkiraan <> :perkiraan and b.UserID = :username
 
-                      order by a.Perkiraan" , ["perkiraan" => $req->perkiraan , "username" => $username ]);
+                      order by a.Perkiraan", ["perkiraan" => $req->perkiraan, "username" => $username]);
 
 
 
-    return $listData;
-  }
+        return $listData;
+    }
 
-  public function listInvoice (Request $req) {
+    public function listInvoice(Request $req)
+    {
 
-    $listData = DB::connection('SML')->select("declare @awal Varchar(15)
+        $listData = DB::connection('SML')->select("declare @awal Varchar(15)
     Select @Awal= :kodecustsupp
     select Cast(1 as Bit) Pilih,Convert(Numeric(18,2),0) Nilai, a.Valas KodeVls, a.Kurs, a.NoFaktur,Min(a.Tanggal) Tanggal, Min(a.JatuhTempo) JatuhTempo,
            SUM(a.Saldo) Saldo, SUM(A.SaldoD) SaldoD
@@ -713,30 +740,32 @@ values ( :perkiraan , :bulan , :tahun , :devisi  , :valas , :kurs , 0 , 0 , :md 
     Group by a.NoFaktur,a.Valas, a.Kurs
     Having SUM(a.Saldo)<>0 or SUM(A.SaldoD)<>0
     Order by a.Nofaktur
-" , ["kodecustsupp" => $req->kodecustsupp]);
-    return $listData;
+", ["kodecustsupp" => $req->kodecustsupp]);
+        return $listData;
+    }
 
-  }
+    public function listCustsupp(Request $req)
+    {
 
-  public function listCustsupp (Request $req) {
+        $listData = DB::connection('SML')->select("select kodecustsupp , namacustsupp , alamat1 from DBCUSTSUPP where JENIS = 1 and isaktif = 1");
+        return $listData;
+    }
 
-    $listData = DB::connection('SML')->select("select kodecustsupp , namacustsupp , alamat1 from DBCUSTSUPP where JENIS = 1 and isaktif = 1");
-    return $listData;
-  }
-
-  public function listCustSuppX (Request $req) {
+    public function listCustSuppX(Request $req)
+    {
 
 
-    $listData = DB::connection('SML')->select("select A.KODECUSTSUPP, A.NAMACUSTSUPP, A.ALAMAT, A.NAMAKOTA, A.ALAMATKOTA, A.PPN, A.Hari
+        $listData = DB::connection('SML')->select("select A.KODECUSTSUPP, A.NAMACUSTSUPP, A.ALAMAT, A.NAMAKOTA, A.ALAMATKOTA, A.PPN, A.Hari
  from vwBrowsCustSupp A
  where A.Perkiraan='21203'
 order by A.KodeCustSupp");
-  return $listData;
-  }
+        return $listData;
+    }
 
-  public function listCustsuppUMB (Request $req) {
+    public function listCustsuppUMB(Request $req)
+    {
 
-    $listData = DB::connection('SML')->select("Select c.KODESUPP,B.NAMACUSTSUPP
+        $listData = DB::connection('SML')->select("Select c.KODESUPP,B.NAMACUSTSUPP
  from DBUMJUAL A
  LEFT OUTER JOIN DBPO C ON A.NOSO=C.NOBUKTI
  LEFT OUTER JOIN DBCUSTSUPP B ON c.KODESUPP=B.KODECUSTSUPP
@@ -745,22 +774,24 @@ where  c.KODESUPP is not null
 
 GROUP BY c.KODESUPP,B.NAMACUSTSUPP
 ORDER BY c.KODESUPP,B.NAMACUSTSUPP");
-    return $listData;
-  }
+        return $listData;
+    }
 
-  public function sumBKMUHT (Request $req) {
-    $listData = DB::connection('SML')->select("select sum(DPP) SubTotal from tempRUMJual where IDUser= :username and Isnull(Noretur,'')<>''
+    public function sumBKMUHT(Request $req)
+    {
+        $listData = DB::connection('SML')->select("select sum(DPP) SubTotal from tempRUMJual where IDUser= :username and Isnull(Noretur,'')<>''
       and Isnull(Notrans,'')<>''", ["username" =>  \Auth::user()->username]);
-    return $listData;
-  }
+        return $listData;
+    }
 
 
-  public function prosesUMB (Request $req) {
+    public function prosesUMB(Request $req)
+    {
 
-    $resx = DB::connection('SML')->update("delete TEMPRUMJUAL where IDUSER = :username", ["username" => \Auth::user()->username]);
+        $resx = DB::connection('SML')->update("delete TEMPRUMJUAL where IDUSER = :username", ["username" => \Auth::user()->username]);
 
 
-    $res = DB::connection('SML')->update("declare @nilaippn numeric(18,2)
+        $res = DB::connection('SML')->update("declare @nilaippn numeric(18,2)
 set @nilaippn= (select top 1 nilaippn/100.00 from dbnilaippn where GETDATE() between tglawal and tglakhir)
 insert into tempRUMJual (NOBUKTI,NORETUR,TANGGAL,NOSO,VALAS,KURS,DPP,PPN,IDUSER,KODESUPP,SUBTOTAL)
 select NoFaktur,'' NOretur,B.TANGGAL,b.NOSO,a.Valas,a.Kurs,
@@ -777,631 +808,649 @@ left outer join (select NOBUKTI,NOSO,SUM(DPP) dppum,SUM(ppn) ppnum,SUM(SUBTOTAL)
 where A.Perkiraan IN ('116100','21201')  and a.nofaktur like '%UMB%' and A.tipetrans='L'
  AND a.KODECUSTSUPP= :custsupp2  and D.nobukti is null
 group by NoFaktur,b.NOSO,a.Valas,a.Kurs,B.TANGGAL
-HAVING SUM(A.debet - isnull(c.nuangmuka,0))>0   ", ["username" => \Auth::user()->username , "custsupp1" => $req->custsupp, "custsupp2" => $req->custsupp]);
+HAVING SUM(A.debet - isnull(c.nuangmuka,0))>0   ", ["username" => \Auth::user()->username, "custsupp1" => $req->custsupp, "custsupp2" => $req->custsupp]);
 
 
 
-$listData = DB::connection('SML')->select("Select *,Nobukti+Noretur KeyBukti,
+        $listData = DB::connection('SML')->select("Select *,Nobukti+Noretur KeyBukti,
 (select top 1 nilaippn/100.00 from dbnilaippn where GETDATE() between tglawal and tglakhir) ppnx,
 (select sum(DPP) SubTotal from tempRUMJual where IDUser= :username1 ) totalqntx
 from tempRUMJual
-WHERE KODESUPP= :custsupp and IDuser= :username", ["custsupp" => $req->custsupp , "username1" =>  \Auth::user()->username , "username" =>  \Auth::user()->username]);
+WHERE KODESUPP= :custsupp and IDuser= :username", ["custsupp" => $req->custsupp, "username1" =>  \Auth::user()->username, "username" =>  \Auth::user()->username]);
 
-  return $listData;
-
-
-  }
+        return $listData;
+    }
 
 
 
-  public function listAkumulasiInput () {
-    $listData = DB::connection('SML')->select("     select a.Perkiraan,b.Keterangan from dbposthutpiut a
+    public function listAkumulasiInput()
+    {
+        $listData = DB::connection('SML')->select("     select a.Perkiraan,b.Keterangan from dbposthutpiut a
 left outer join dbperkiraan b on b.perkiraan=a.perkiraan
 where a.Kode='AKM' order by a.Perkiraan
 ");
-      return $listData;
+        return $listData;
+    }
 
-  }
+    public function listBiayaInput()
+    {
 
-  public function listBiayaInput () {
-
-    $username = \Auth::user()->username;
-    $listData = DB::connection('SML')->select("
+        $username = \Auth::user()->username;
+        $listData = DB::connection('SML')->select("
 select Perkiraan,Keterangan from dbPerkiraan where  tipe=1
  and perkiraan in (select perkiraan from DBAKSESPERKIRAANR where userid= :username )
 
-" , ["username" => $username ]);
-      return $listData;
-  }
+", ["username" => $username]);
+        return $listData;
+    }
 
 
-  public function listUMB (Request $req) {
+    public function listUMB(Request $req)
+    {
 
 
-    $listData = DB::connection('SML')->select("Select *,Nobukti+Noretur KeyBukti
+        $listData = DB::connection('SML')->select("Select *,Nobukti+Noretur KeyBukti
     from tempRUMJual
-    WHERE KODESUPP= :custsupp and IDuser= :username", ["custsupp" => $req->custsupp , "username" =>  \Auth::user()->username]);
+    WHERE KODESUPP= :custsupp and IDuser= :username", ["custsupp" => $req->custsupp, "username" =>  \Auth::user()->username]);
 
-      return $listData;
-  }
-
-  // Sebelumnya tanpa cek hak di server (tombol pun tidak mengecek) - kini wajib
-  // DBFLMENUWEB.IsOtorisasi1 untuk menu 'kas'. UPDATE-nya pindah ke App\Otorisasi\KasOtorisasi
-  // supaya sama dengan yang dipakai halaman approve mobile (/otorisasi/{id}).
-  public function spOtorisasi (Request $req, OtorisasiService $oto) {
-    $username = \Auth::user()->username;
-    if (!$oto->canApprove($username, 'kas')) {
-      return response('Anda tidak berhak otorisasi Kas', 403);
+        return $listData;
     }
-    $res = $oto->handler('kas')->approve($req->nobukti, $username);
-    $oto->closePending('kas', $req->nobukti, $username);
-    return $res;
-  }
-  public function spBatalOtorisasi (Request $req, OtorisasiService $oto) {
-    if (!$oto->canApprove(\Auth::user()->username, 'kas')) {
-      return response('Anda tidak berhak batal otorisasi Kas', 403);
-    }
-    $tanggal = date('Y-m-d H:i:s');
-    $res = DB::connection('SML')->update("update dbtrans set isOtorisasi1 = 0, maxol = -1 , OtoUser1= '' , TglOto1 = NULL where nobukti = :nobukti", [ "nobukti" => $req->nobukti]);
-    app('App\Http\Controllers\GlobalController')->LoggingData('btloto', 'KAS', $req->nobukti, $req->pket, 0, 'dbtrans');
-    return $res;
-  }
 
-  public function spAddAktiva (Request $req) {
-
-    $username = \Auth::user()->username;
-    $periode = DB::connection("SML")->select('select TOP 1 * from DBPERIODE where user_id = :username ' , ["username" => $username]);
-
-
-      $jmlrecord = $req->jmlrecord;
-      if ($jmlrecord == 0 ) {
-        $check = DB::connection('SML')->select('select * from DBTRANS where Nobukti = :nobukti',["nobukti" => $req->nobukti]);
-          if ($check) {
-            return 2;
+    // Sebelumnya tanpa cek hak di server (tombol pun tidak mengecek) - kini wajib
+    // DBFLMENUWEB.IsOtorisasi1 untuk menu 'kas'. UPDATE-nya pindah ke App\Otorisasi\KasOtorisasi
+    // supaya sama dengan yang dipakai halaman approve mobile (/otorisasi/{id}).
+    public function spOtorisasi(Request $req, OtorisasiService $oto)
+    {
+        $username = \Auth::user()->username;
+        if (!$oto->canApprove($username, 'kas')) {
+            return response('Anda tidak berhak otorisasi Kas', 403);
         }
-      }
-      $plok = DB::connection("SML")->select("Select ISnull(IsLokalOrExim,0) IsLokalOrExim from dbPostHutpiut where perkiraan= :lawan
-    " , ["lawan" => $req->lawanx]);
+        $res = $oto->handler('kas')->approve($req->nobukti, $username);
+        $oto->closePending('kas', $req->nobukti, $username);
+        return $res;
+    }
+    public function spBatalOtorisasi(Request $req, OtorisasiService $oto)
+    {
+        if (!$oto->canApprove(\Auth::user()->username, 'kas')) {
+            return response('Anda tidak berhak batal otorisasi Kas', 403);
+        }
+        $tanggal = date('Y-m-d H:i:s');
+        $res = DB::connection('SML')->update("update dbtrans set isOtorisasi1 = 0, maxol = -1 , OtoUser1= '' , TglOto1 = NULL where nobukti = :nobukti", ["nobukti" => $req->nobukti]);
+        app('App\Http\Controllers\GlobalController')->LoggingData('btloto', 'KAS', $req->nobukti, $req->pket, 0, 'dbtrans');
+        return $res;
+    }
+
+    public function spAddAktiva(Request $req)
+    {
+
+        $username = \Auth::user()->username;
+        $periode = DB::connection("SML")->select('select TOP 1 * from DBPERIODE where user_id = :username ', ["username" => $username]);
+
+
+        $jmlrecord = $req->jmlrecord;
+        if ($jmlrecord == 0) {
+            $check = DB::connection('SML')->select('select * from DBTRANS where Nobukti = :nobukti', ["nobukti" => $req->nobukti]);
+            if ($check) {
+                return 2;
+            }
+        }
+        $plok = DB::connection("SML")->select("Select ISnull(IsLokalOrExim,0) IsLokalOrExim from dbPostHutpiut where perkiraan= :lawan
+    ", ["lawan" => $req->lawanx]);
 
 
         DB::connection('SML')->statement('exec sp_TransaksiKasBankDPH ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?', [
-          $req->choice,
-          $req->nobukti,
-          $req->nourut,
-          $req->tanggal,
-          $req->note ? $req->note : '',
-          $req->lampiran ? $req->lampiran : '',
-          $req->kodedevisi,
-          $req->perkiraanx,
-          $req->lawanx,
-          $req->keterangan ? $req->keterangan : '', // 10
-          $req->keterangan2 ? $req->keterangan2 : '',
-          $req->jumlah,
-          $req->kredit,
-          $req->valas,
-          $req->kurs,
-          $req->jumlahrp,
-          $req->kreditrp,
-          $req->transaksi,
-          $req->tphc,
-          $req->custsuppP ? $req->custsuppP : '' , // 20
-          $req->custsuppL ? $req->custsuppL : '' ,
-          $req->urut,
-          $req->noaktivaP ? $req->noaktivaP : '' ,
-          $req->noaktivaL ? $req->noaktivaL : '' ,
-          $req->statusaktivaP ? $req->statusaktivaP : '',
-          $req->statusaktivaL ? $req->statusaktivaL : '',
-          $req->nobon ? $req->nobon : '',
-          $req->kodedepartemen,
-          $req->kodeP ? $req->kodeP : '',
-          $req->kodeL ? $req->kodeL : '', // 30
-          $req->statusgiro ? $req->statusgiro : '',
-          $req->simbol,
-          $req->kodeperkiraan,
-          $req->flagsimbol ? $req->flagsimbol : '',
-          $req->kodecost ? $req->kodecost : '',
-          $req->kodesubcost ? $req->kodesubcost : '',
-          $req->nodph ?   $req->nodph : '',
-          $req->urutdph,
-          $req->dppdph ? $req->dppdph : '', // 40
-          $username,
-          $req->tp ? $req->tp : '',
-          $req->ppklx ? $req->ppklx : '',
-          $req->nofaktur ? $req->nofaktur : '',
-          $plok[0]->IsLokalOrExim,
-          $req->nobons ? $req->nobons : '',
-          $req->jmlrecord,
-          $req->notitipan ? $req->notitipan : '',
-          $req->uruttitipan,
-          $req->keterangandetail ? $req->keterangandetail : '', // 50
-          $req->pSKB,
+            $req->choice,
+            $req->nobukti,
+            $req->nourut,
+            $req->tanggal,
+            $req->note ? $req->note : '',
+            $req->lampiran ? $req->lampiran : '',
+            $req->kodedevisi,
+            $req->perkiraanx,
+            $req->lawanx,
+            $req->keterangan ? $req->keterangan : '', // 10
+            $req->keterangan2 ? $req->keterangan2 : '',
+            $req->jumlah,
+            $req->kredit,
+            $req->valas,
+            $req->kurs,
+            $req->jumlahrp,
+            $req->kreditrp,
+            $req->transaksi,
+            $req->tphc,
+            $req->custsuppP ? $req->custsuppP : '', // 20
+            $req->custsuppL ? $req->custsuppL : '',
+            $req->urut,
+            $req->noaktivaP ? $req->noaktivaP : '',
+            $req->noaktivaL ? $req->noaktivaL : '',
+            $req->statusaktivaP ? $req->statusaktivaP : '',
+            $req->statusaktivaL ? $req->statusaktivaL : '',
+            $req->nobon ? $req->nobon : '',
+            $req->kodedepartemen,
+            $req->kodeP ? $req->kodeP : '',
+            $req->kodeL ? $req->kodeL : '', // 30
+            $req->statusgiro ? $req->statusgiro : '',
+            $req->simbol,
+            $req->kodeperkiraan,
+            $req->flagsimbol ? $req->flagsimbol : '',
+            $req->kodecost ? $req->kodecost : '',
+            $req->kodesubcost ? $req->kodesubcost : '',
+            $req->nodph ?   $req->nodph : '',
+            $req->urutdph,
+            $req->dppdph ? $req->dppdph : '', // 40
+            $username,
+            $req->tp ? $req->tp : '',
+            $req->ppklx ? $req->ppklx : '',
+            $req->nofaktur ? $req->nofaktur : '',
+            $plok[0]->IsLokalOrExim,
+            $req->nobons ? $req->nobons : '',
+            $req->jmlrecord,
+            $req->notitipan ? $req->notitipan : '',
+            $req->uruttitipan,
+            $req->keterangandetail ? $req->keterangandetail : '', // 50
+            $req->pSKB,
 
         ]);
 
         $check = DB::connection('SML')->select("
           select Perkiraan ,  Bulan, Tahun , Devisi , md from dbaktivadet where Perkiraan = :perkiraan and Bulan = :bulan and Tahun = :tahun
-        " , ["perkiraan" => $req->xaktivagroupperkiraan , "bulan" => $periode[0]->bulan , "tahun" => $periode[0]->tahun]);
+        ", ["perkiraan" => $req->xaktivagroupperkiraan, "bulan" => $periode[0]->bulan, "tahun" => $periode[0]->tahun]);
         if ($check) {
 
-    //       $update = DB::connection('SML')->update("
-    //
-    // update DBAKTIVADET set MD = :md
-    // where Perkiraan = :perkiraan and Bulan = :bulan and Tahun = :tahun " ,
-    // ["md" => (int)$req->jumlah + (int)$check[0]->md ,  "perkiraan" => $req->xaktivagroupperkiraan , "bulan" => $periode[0]->bulan , "tahun" => $periode[0]->tahun]
-    // );
+            //       $update = DB::connection('SML')->update("
+            //
+            // update DBAKTIVADET set MD = :md
+            // where Perkiraan = :perkiraan and Bulan = :bulan and Tahun = :tahun " ,
+            // ["md" => (int)$req->jumlah + (int)$check[0]->md ,  "perkiraan" => $req->xaktivagroupperkiraan , "bulan" => $periode[0]->bulan , "tahun" => $periode[0]->tahun]
+            // );
 
         } else {
 
 
-          $add = DB::connection('SML')->statement("
+            $add = DB::connection('SML')->statement(
+                "
           insert into DBAKTIVADET (Perkiraan , Bulan, Tahun , Devisi , Valas , Kurs , Awal , AwalSusut , MD , DMD , MK , DMK , SD , DSD , SK , DSK )
     values ( :perkiraan , :bulan , :tahun , :devisi  , :valas , :kurs , 0 , 0 , :md , 0 , 0 , 0 , 0 , 0 , 0 , 0 )
           ",
-        [
-          "perkiraan" => $req->xaktivagroupperkiraan ,
-          "bulan" => $periode[0]->bulan ,
-          "tahun" => $periode[0]->tahun ,
-          "devisi" => $req->devisi ,
-          "valas" => $req->valas ,
-          "kurs" => $req->kurs ,
-          "md" => $req->jumlah ,
-        ]);
-
+                [
+                    "perkiraan" => $req->xaktivagroupperkiraan,
+                    "bulan" => $periode[0]->bulan,
+                    "tahun" => $periode[0]->tahun,
+                    "devisi" => $req->devisi,
+                    "valas" => $req->valas,
+                    "kurs" => $req->kurs,
+                    "md" => $req->jumlah,
+                ]
+            );
         }
 
-      return 1;
+        return 1;
+    }
 
-  }
-
-  public function spTempHutPiut (Request $req) {
-    // Tanggal baris pelunasan = hari ini, jam 00:00:00 (tanpa jam) - sp_TransaksiKasBankDPH yang
-    // membaca dbTempHutPiut tidak menerima Tanggal ber-jam. Dipakai Bank juga (kassptemphutpiut).
-    $tanggal = date('Y-m-d 00:00:00');
- $data = $req->data;
-    $username = \Auth::user()->username;
-    if ($req->choice == 'I' ) {
-      // Baris di modal sudah dikelompokkan per faktur (lihat tunaiRows()) dan tidak membawa
-      // semua kolom yang dibutuhkan sp_TempHutPiut, jadi ambil baris pertama faktur itu sendiri.
-      $base = DB::connection('SML')->select("select top 1 * from dbTempHutPiut
+    public function spTempHutPiut(Request $req)
+    {
+        // Tanggal baris pelunasan = hari ini, jam 00:00:00 (tanpa jam) - sp_TransaksiKasBankDPH yang
+        // membaca dbTempHutPiut tidak menerima Tanggal ber-jam. Dipakai Bank juga (kassptemphutpiut).
+        $tanggal = date('Y-m-d 00:00:00');
+        $data = $req->data;
+        $username = \Auth::user()->username;
+        if ($req->choice == 'I') {
+            // Baris di modal sudah dikelompokkan per faktur (lihat tunaiRows()) dan tidak membawa
+            // semua kolom yang dibutuhkan sp_TempHutPiut, jadi ambil baris pertama faktur itu sendiri.
+            $base = DB::connection('SML')->select("select top 1 * from dbTempHutPiut
       where IDUSER = :username and NoFaktur = :nofaktur and KodeCustSupp = :kodecustsupp
       and isnull(StatusUID, '') not in ('I', 'D')
       order by Urut", ["username" => $username, "nofaktur" => $req->nofaktur, "kodecustsupp" => $req->kodecustsupp]);
-      if (!$base) {
-        return 0;
-      }
-      $data = (array) $base[0];
+            if (!$base) {
+                return 0;
+            }
+            $data = (array) $base[0];
 
-      $check = DB::connection('SML')->select("select * from dbTempHutPiut where NoFaktur = :nofaktur and StatusUID = 'I' and IDUSER = :username",
-        ["nofaktur" => $data['NoFaktur'], "username" => $username]);
-        if ($check) {
-          return 2;
-      }
-    }
-
-
-    // 29 parameter (sampai @NODPh, @UrutDPH) - lihat daftar bernama di
-    // MemorialKoreksiController::addKartuPT(). Dulu hanya 28 "?" untuk 29 nilai: driver sqlsrv
-    // (Windows/lokal) diam saja, tapi driver dblib di server menolak (SQLSTATE HY093).
-    DB::connection('SML')->statement('exec sp_TempHutPiut ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?', [
-      $req->choice,
-$data['NoFaktur'],
-$data['NoRetur'] ? $data['NoRetur'] : '',
-$req->tipetrans,
-$data['KodeCustSupp'],
-$req->nobukti,
-$data['NoMsk'],
-$req->urut,
-$tanggal,
-$data['JatuhTempo'],
-$req->debet,
-$req->kredit,
-$data['Valas'],
-$data['Kurs'],
-$data['KodeSales'] ? $data['KodeSales'] : '' ,
-$data['Tipe'],
-$data['Perkiraan'],
-$data['Catatan'] ? $data['Catatan'] : '',
-$username,
-$data['TipeDK'],
-$req->noinvoice,
-$data['Valas_'],
-$data['Kurs_'],
-$data['Kurs_'],
-0,
-0,
-'',
-($data['NoDPH'] ?? '') ?: '',
-($data['urutDPH'] ?? 0) ?: 0
-
-    ]);
-
-  return 1;
-  }
-
-  public function spAdd (Request $req) {
-      $username = \Auth::user()->username;
-
-      $jmlrecord = $req->jmlrecord;
-      if ($jmlrecord == 0 ) {
-        $check = DB::connection('SML')->select('select * from DBTRANS where Nobukti = :nobukti',["nobukti" => $req->nobukti]);
-          if ($check) {
-            return 2;
+            $check = DB::connection('SML')->select(
+                "select * from dbTempHutPiut where NoFaktur = :nofaktur and StatusUID = 'I' and IDUSER = :username",
+                ["nofaktur" => $data['NoFaktur'], "username" => $username]
+            );
+            if ($check) {
+                return 2;
+            }
         }
-      }
-      $plok = DB::connection("SML")->select("Select ISnull(IsLokalOrExim,0) IsLokalOrExim from dbPostHutpiut where perkiraan= :lawan
-    " , ["lawan" => $req->lawanx]);
 
-    // return ['a' => $plok[0]['IsLokalOrExim']];
-    // $xplok = 0;
-    // return ['a' => $plok[0]->IsLokalOrExim];
 
-    $xplok = 0;
-    // return $plok;
-    if (count($plok)) {
-      $xplok = $plok[0]->IsLokalOrExim;
-    }
-    if($req->xislocalorexim == 1) {
-      $xplok = 1;
-      $uruttunai = DB::connection('SML')->select('Select isnull(MAX(urut) , 0) + 1 URUT from dbTransaksi where NoBukti = :nobukti', ["nobukti" => $req->nobukti ]);
-      // return ['a'=> $uruttunai[0]->URUT];
-      DB::connection('SML')->statement('update dbtemphutpiut set nomsk = :urut where iduser = :username', ["urut" => $uruttunai[0]->URUT , "username" => $username]);
-
-      // Pelunasan Piutang (Lawan 113100): NoRetur pelunasan dibukukan kosong. NoRetur ikut
-      // tersalin dari baris faktur saat + (spTempHutPiut) dan tetap tampil di modal sampai disimpan.
-      if ($req->lawan == '113100') {
-        DB::connection('SML')->statement("update dbTempHutPiut set NoRetur = '' where IDUSER = :username and NoBukti = :nobukti and StatusUID = 'I'",
-          ["username" => $username, "nobukti" => $req->nobukti]);
-      }
-
-    }
-
-        DB::connection('SML')->statement('exec sp_TransaksiKasBankDPH ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?', [
-          $req->choice,
-          $req->nobukti,
-          $req->nourut,
-          $req->tanggal,
-          $req->note ? $req->note : '',
-          $req->lampiran ? $req->lampiran : '',
-          $req->kodedevisi,
-          $req->perkiraanx,
-          $req->lawanx,
-          $req->keterangan ? $req->keterangan : '', // 10
-          $req->keterangan2 ? $req->keterangan2 : '',
-          $req->jumlah,
-          $req->kredit,
-          $req->valas,
-          $req->kurs,
-          $req->jumlahrp,
-          $req->kreditrp,
-          $req->transaksi,
-          $req->tphc,
-          $req->custsuppP ? $req->custsuppP : '' , // 20
-          $req->custsuppL ? $req->custsuppL : '' ,
-          $req->urut,
-          $req->noaktivaP ? $req->noaktivaP : '' ,
-          $req->noaktivaL ? $req->noaktivaL : '' ,
-          $req->statusaktivaP ? $req->statusaktivaP : '',
-          $req->statusaktivaL ? $req->statusaktivaL : '',
-          $req->nobon ? $req->nobon : '',
-          $req->kodedepartemen,
-          $req->kodeP ? $req->kodeP : '',
-          $req->kodeL ? $req->kodeL : '', // 30
-          $req->statusgiro ? $req->statusgiro : '',
-          $req->simbol,
-          $req->kodeperkiraan,
-          $req->flagsimbol ? $req->flagsimbol : '',
-          $req->kodecost ? $req->kodecost : '',
-          $req->kodesubcost ? $req->kodesubcost : '',
-          $req->nodph ?   $req->nodph : '',
-          $req->urutdph,
-          $req->dppdph ? $req->dppdph : '', // 40
-          $username,
-          $req->tp ? $req->tp : '',
-          $req->ppklx ? $req->ppklx : '',
-          $req->nofaktur ? $req->nofaktur : '',
-          $xplok,
-          $req->nobons ? $req->nobons : '',
-          $req->jmlrecord,
-          $req->notitipan ? $req->notitipan : '',
-          $req->uruttitipan,
-          $req->keterangandetail ? $req->keterangandetail : '', // 50
-          $req->pSKB,
+        // 29 parameter (sampai @NODPh, @UrutDPH) - lihat daftar bernama di
+        // MemorialKoreksiController::addKartuPT(). Dulu hanya 28 "?" untuk 29 nilai: driver sqlsrv
+        // (Windows/lokal) diam saja, tapi driver dblib di server menolak (SQLSTATE HY093).
+        DB::connection('SML')->statement('exec sp_TempHutPiut ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?', [
+            $req->choice,
+            $data['NoFaktur'],
+            $data['NoRetur'] ? $data['NoRetur'] : '',
+            $req->tipetrans,
+            $data['KodeCustSupp'],
+            $req->nobukti,
+            $data['NoMsk'],
+            $req->urut,
+            $tanggal,
+            $data['JatuhTempo'],
+            $req->debet,
+            $req->kredit,
+            $data['Valas'],
+            $data['Kurs'],
+            $data['KodeSales'] ? $data['KodeSales'] : '',
+            $data['Tipe'],
+            $data['Perkiraan'],
+            $data['Catatan'] ? $data['Catatan'] : '',
+            $username,
+            $data['TipeDK'],
+            $req->noinvoice,
+            $data['Valas_'],
+            $data['Kurs_'],
+            $data['Kurs_'],
+            0,
+            0,
+            '',
+            ($data['NoDPH'] ?? '') ?: '',
+            ($data['urutDPH'] ?? 0) ?: 0
 
         ]);
 
-        DB::connection('SML')->statement("delete from dbTempHutPiut where IDUSER = :username",["username"=>$username] );
+        return 1;
+    }
 
-      return 1;
+    public function spAdd(Request $req)
+    {
+        $username = \Auth::user()->username;
 
-  }
+        $jmlrecord = $req->jmlrecord;
+        if ($jmlrecord == 0) {
+            $check = DB::connection('SML')->select('select * from DBTRANS where Nobukti = :nobukti', ["nobukti" => $req->nobukti]);
+            if ($check) {
+                return 2;
+            }
+        }
+        $plok = DB::connection("SML")->select("Select ISnull(IsLokalOrExim,0) IsLokalOrExim from dbPostHutpiut where perkiraan= :lawan
+    ", ["lawan" => $req->lawanx]);
+
+        // return ['a' => $plok[0]['IsLokalOrExim']];
+        // $xplok = 0;
+        // return ['a' => $plok[0]->IsLokalOrExim];
+
+        $xplok = 0;
+        // return $plok;
+        if (count($plok)) {
+            $xplok = $plok[0]->IsLokalOrExim;
+        }
+        if ($req->xislocalorexim == 1) {
+            $xplok = 1;
+            $uruttunai = DB::connection('SML')->select('Select isnull(MAX(urut) , 0) + 1 URUT from dbTransaksi where NoBukti = :nobukti', ["nobukti" => $req->nobukti]);
+            // return ['a'=> $uruttunai[0]->URUT];
+            DB::connection('SML')->statement('update dbtemphutpiut set nomsk = :urut where iduser = :username', ["urut" => $uruttunai[0]->URUT, "username" => $username]);
+
+            // Pelunasan Piutang (Lawan 113100): NoRetur pelunasan dibukukan kosong. NoRetur ikut
+            // tersalin dari baris faktur saat + (spTempHutPiut) dan tetap tampil di modal sampai disimpan.
+            if ($req->lawan == '113100') {
+                DB::connection('SML')->statement(
+                    "update dbTempHutPiut set NoRetur = '' where IDUSER = :username and NoBukti = :nobukti and StatusUID = 'I'",
+                    ["username" => $username, "nobukti" => $req->nobukti]
+                );
+            }
+        }
+
+        DB::connection('SML')->statement('exec sp_TransaksiKasBankDPH ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?', [
+            $req->choice,
+            $req->nobukti,
+            $req->nourut,
+            $req->tanggal,
+            $req->note ? $req->note : '',
+            $req->lampiran ? $req->lampiran : '',
+            $req->kodedevisi,
+            $req->perkiraanx,
+            $req->lawanx,
+            $req->keterangan ? $req->keterangan : '', // 10
+            $req->keterangan2 ? $req->keterangan2 : '',
+            $req->jumlah,
+            $req->kredit,
+            $req->valas,
+            $req->kurs,
+            $req->jumlahrp,
+            $req->kreditrp,
+            $req->transaksi,
+            $req->tphc,
+            $req->custsuppP ? $req->custsuppP : '', // 20
+            $req->custsuppL ? $req->custsuppL : '',
+            $req->urut,
+            $req->noaktivaP ? $req->noaktivaP : '',
+            $req->noaktivaL ? $req->noaktivaL : '',
+            $req->statusaktivaP ? $req->statusaktivaP : '',
+            $req->statusaktivaL ? $req->statusaktivaL : '',
+            $req->nobon ? $req->nobon : '',
+            $req->kodedepartemen,
+            $req->kodeP ? $req->kodeP : '',
+            $req->kodeL ? $req->kodeL : '', // 30
+            $req->statusgiro ? $req->statusgiro : '',
+            $req->simbol,
+            $req->kodeperkiraan,
+            $req->flagsimbol ? $req->flagsimbol : '',
+            $req->kodecost ? $req->kodecost : '',
+            $req->kodesubcost ? $req->kodesubcost : '',
+            $req->nodph ?   $req->nodph : '',
+            $req->urutdph,
+            $req->dppdph ? $req->dppdph : '', // 40
+            $username,
+            $req->tp ? $req->tp : '',
+            $req->ppklx ? $req->ppklx : '',
+            $req->nofaktur ? $req->nofaktur : '',
+            $xplok,
+            $req->nobons ? $req->nobons : '',
+            $req->jmlrecord,
+            $req->notitipan ? $req->notitipan : '',
+            $req->uruttitipan,
+            $req->keterangandetail ? $req->keterangandetail : '', // 50
+            0, // untuk input pskb biar parameternya sama jumlahnya
+
+        ]);
+
+        DB::connection('SML')->statement("delete from dbTempHutPiut where IDUSER = :username", ["username" => $username]);
+
+        return 1;
+    }
 
 
-    public function spAddNewAktiva (Request $req) {
+    public function spAddNewAktiva(Request $req)
+    {
         $username = \Auth::user()->username;
 
         // $jmlrecord = $req->jmlrecord;
         // if ($jmlrecord == 0 ) {
-          $check = DB::connection('SML')->select('select * from dbaktiva where Perkiraan = :noaktiva',["noaktiva" => $req->noaktiva]);
-            if ($check) {
-              return 2;
-          }
+        $check = DB::connection('SML')->select('select * from dbaktiva where Perkiraan = :noaktiva', ["noaktiva" => $req->noaktiva]);
+        if ($check) {
+            return 2;
+        }
         // }
 
 
-          DB::connection('SML')->statement('exec SP_AktivaTetap ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?', [
-            $req->choice ,// @Choice char(1),
-            $req->devisi ,// @Devisi varchar(5)='',
-            $req->noaktiva ,// @Perkiraan varchar(30)='',
-            $req->keterangan ,// @Keterangan varchar(50)='',
-            $req->kuantum ,// @Quantity Numeric(18,2)=0,
-            $req->persen ,// @Persen Numeric(18,2)=0,
-            $req->tglpemakaian ,// @Tanggal datetime=null,
-            $req->metodepenyusutan ,// @Tipe varchar(1)='',
-            $req->akumulasi ,// @Akumulasi varchar(15)='',
-            $req->biaya1 ? $req->biaya1 : '',// @Biaya varchar(15)='',
-            $req->groupaktiva ,// @NoMuka varchar(25)='',
-            $req->nobelakang ,// @NoBelakang varchar(20)='',
-            $req->biaya2 ? $req->biaya2 : '',// @biaya2 varchar(15),
-            $req->persen1 ? $req->persen1 : '0.00' ,// @persen1 numeric(18,2),
-            $req->persen2 ? $req->persen2 : '0.00' ,// @persen2 numeric(18,2),
-            $req->biaya3 ? $req->biaya3 : '' ,// @biaya3 varchar(15)='',
-            $req->persen3 ? $req->persen3 : '0.00' ,// @persenbiaya3 numeric(18,2)=0,
-            '' ,// @biaya4 varchar(15)='',
-            0 ,// @persenbiaya4 numeric(18,2)=0,
-            $req->tipeaktiva ,// @TipeAktiva tinyint,
-            '' ,// @Bagian varchar(15),
-            '' ,// @NoBelakang2 varchar(20),
-            0 ,// @IsHeader tinyint,
-            '' ,// @NoAktivaHd varchar(30),
-            $req->tglperolehan ,// @TglPeroleh DateTime=Null
-
-          ]);
-
-        return 1;
-
-    }
-
-    public function listCosting (Request $req) {
-
-      // $listData = DB::connection('SML')->select("select Perkiraan, Keterangan , Simbol from DBPERKIRAAN where Perkiraan like '1111%' and Tipe = 1");
-      $listData = DB::connection('SML')->select("select a.* , b.Urut, b.Perkiraan  from DBCOST a left outer join DBPERKCOST b on a.KodeCost = b.KodeCost
-  where b.Perkiraan = :lawan
-  " , ["lawan" => $req->kodelawan]);
-
-
-      return $listData;
-    }
-
-    public function listSubCosting (Request $req) {
-
-      // $listData = DB::connection('SML')->select("select Perkiraan, Keterangan , Simbol from DBPERKIRAAN where Perkiraan like '1111%' and Tipe = 1");
-      $listData = DB::connection('SML')->select("select * from vwSubCost where KodeCost = :kodecosting
-
-  " , ["kodecosting" => $req->kodecosting]);
-
-
-      return $listData;
-    }
-
-
-  public function spAddDPPDPH (Request $req) {
-      $username = \Auth::user()->username;
-
-      $jmlrecord = $req->jmlrecord;
-
-
-      if ($jmlrecord == 0 ) {
-        $check = DB::connection('SML')->select('select * from DBTRANS where Nobukti = :nobukti',["nobukti" => $req->nobukti]);
-          if ($check) {
-            return 2;
-        }
-      }
-
-      $tempData = DB::connection('SML')->select('exec SP_ViewDPH ?,?,?,?,?' , [
-        $req->dppdph,
-        $req->valas,
-        $req->nodph,
-        $req->perkiraan,
-        $req->custsupp
-
-      ]);
-
-      // return $tempData;
-
-      // $outstandingReguler = DB::connection("SML")->select('exec sp_sosiapkirim ?,?,?',[ $periode->bulan , $periode->tahun ,\Auth::user()->username ]);
-      $plok = DB::connection("SML")->select("Select ISnull(IsLokalOrExim,0) IsLokalOrExim from dbPostHutpiut where perkiraan= :lawan
-    " , ["lawan" => $req->lawanx]);
-
-      // Jumlah yang diketik user dialokasikan ke baris dokumen sesuai urutan SP_ViewDPH: tiap baris
-      // dibukukan penuh sampai jumlah habis, baris terakhir dipotong sisanya, sisanya dilewati.
-      // Jumlah sama dengan total dokumen (atau kosong) = perilaku lama, semua baris dibukukan penuh.
-      $totalDibayar = 0.0;
-      foreach ($tempData as $d) {
-        $totalDibayar += (float) $d->DIBAYAR;
-      }
-      $totalDibayar = round($totalDibayar, 2);
-      $jumlahInput = $req->jumlah === null ? 0.0 : round((float) $req->jumlah, 2);
-
-      $baris = [];
-      if ($jumlahInput <= 0 || abs($jumlahInput - $totalDibayar) < 0.005) {
-        foreach ($tempData as $d) {
-          $baris[] = [$d, (float) $d->DIBAYAR];
-        }
-      } elseif ($jumlahInput > $totalDibayar) {
-        return 3; // melebihi total dokumen
-      } else {
-        $sisa = $jumlahInput;
-        foreach ($tempData as $d) {
-          $nilai = round(min((float) $d->DIBAYAR, $sisa), 2);
-          if ($nilai <= 0) {
-            continue;
-          }
-          $baris[] = [$d, $nilai];
-          $sisa = round($sisa - $nilai, 2);
-        }
-        if (!count($baris)) {
-          return 3;
-        }
-      }
-
-      foreach ($baris as [$d, $nilaiDibayar])  {
-        // return [
-        //   'a' => $d->DIBAYAR,
-        //   'b' => $req->kurs
-        // ];
-
-        DB::connection('SML')->statement('exec sp_TransaksiKasBankDPH ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?', [
-          $req->choice,
-          $req->nobukti,
-          $req->nourut,
-          $req->tanggal,
-          $req->note ? $req->note : '',
-          $req->lampiran ? $req->lampiran : '',
-          $req->kodedevisi,
-          $req->perkiraanx,
-          $req->lawanx,
-          $req->keterangan ? $req->keterangan : '', // 10
-          $req->keterangan2 ? $req->keterangan2 : '',
-          $nilaiDibayar,
-          $req->kredit,
-          $req->valas,
-          $req->kurs,
-          $nilaiDibayar * (float) $req->kurs,
-          $req->kreditrp,
-          $req->transaksi,
-          $req->tphc,
-          $req->custsuppP ? $req->custsuppP : '' , // 20
-          $req->custsuppL ? $req->custsuppL : '' ,
-          $req->urut,
-          $req->noaktivaP ? $req->noaktivaP : '' ,
-          $req->noaktivaL ? $req->noaktivaL : '' ,
-          $req->statusaktivaP ? $req->statusaktivaP : '',
-          $req->statusaktivaL ? $req->statusaktivaL : '',
-          $req->nobon ? $req->nobon : '',
-          $req->kodedepartemen,
-          $req->kodeP ? $req->kodeP : '',
-          $req->kodeL ? $req->kodeL : '', // 30
-          $req->statusgiro ? $req->statusgiro : '',
-          $req->simbol,
-          $req->kodeperkiraan,
-          $req->flagsimbol ? $req->flagsimbol : '',
-          $req->kodecost ? $req->kodecost : '',
-          $req->kodesubcost ? $req->kodesubcost : '',
-          $req->nodph ?   $req->nodph : '',
-          $d->Urut,
-          $req->dppdph ? $req->dppdph : '', // 40
-          $username,
-          $d->Tp ? $d->Tp : '',
-          $req->ppklx ? $req->ppklx : '',
-          $d->NOFAKTUR ? $d->NOFAKTUR  : '',
-          $plok[0]->IsLokalOrExim,
-          $req->nobons ? $req->nobons : '',
-          $jmlrecord,
-          $req->notitipan ? $req->notitipan : '',
-          $req->uruttitipan,
-          $req->keterangandetail ? $req->keterangandetail : '', // 50
-          $req->pSKB,
+        DB::connection('SML')->statement('exec SP_AktivaTetap ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?', [
+            $req->choice, // @Choice char(1),
+            $req->devisi, // @Devisi varchar(5)='',
+            $req->noaktiva, // @Perkiraan varchar(30)='',
+            $req->keterangan, // @Keterangan varchar(50)='',
+            $req->kuantum, // @Quantity Numeric(18,2)=0,
+            $req->persen, // @Persen Numeric(18,2)=0,
+            $req->tglpemakaian, // @Tanggal datetime=null,
+            $req->metodepenyusutan, // @Tipe varchar(1)='',
+            $req->akumulasi, // @Akumulasi varchar(15)='',
+            $req->biaya1 ? $req->biaya1 : '', // @Biaya varchar(15)='',
+            $req->groupaktiva, // @NoMuka varchar(25)='',
+            $req->nobelakang, // @NoBelakang varchar(20)='',
+            $req->biaya2 ? $req->biaya2 : '', // @biaya2 varchar(15),
+            $req->persen1 ? $req->persen1 : '0.00', // @persen1 numeric(18,2),
+            $req->persen2 ? $req->persen2 : '0.00', // @persen2 numeric(18,2),
+            $req->biaya3 ? $req->biaya3 : '', // @biaya3 varchar(15)='',
+            $req->persen3 ? $req->persen3 : '0.00', // @persenbiaya3 numeric(18,2)=0,
+            '', // @biaya4 varchar(15)='',
+            0, // @persenbiaya4 numeric(18,2)=0,
+            $req->tipeaktiva, // @TipeAktiva tinyint,
+            '', // @Bagian varchar(15),
+            '', // @NoBelakang2 varchar(20),
+            0, // @IsHeader tinyint,
+            '', // @NoAktivaHd varchar(30),
+            $req->tglperolehan, // @TglPeroleh DateTime=Null
 
         ]);
 
-        $jmlrecord = 1;
-      }
+        return 1;
+    }
 
-      return 1;
+    public function listCosting(Request $req)
+    {
 
-  }
-
-
-
-
-  public function spAddTempRUMJUAL (Request $req) {
-    $username = \Auth::user()->username;
-    $periode = DB::connection("SML")->select('select TOP 1 * from DBPERIODE where user_id = :username ' , ["username" => $username]);
-    $kode = 'RUM';
-    $inisial = DB::connection("SML")->select('select ' . $kode . ' from DBNOMOR');
-    // $inisialx = 'KN';
-    // return $inisialx;
-    $values = [
-        $inisial[0]->$kode,
-        $periode[0]->bulan,
-        $periode[0]->tahun,
-        $username
-    ];
-
-    $noBukti = DB::connection('SML')->select('exec SP_IsiNobuktiSimbol ?,?,?,?',$values);
-
-    $res = DB::connection('SML')->update("insert into tempRUMJual (NOBUKTI,NORETUR,TANGGAL,NOSO,VALAS,KURS,DPP,PPN,IDUSER,KODESUPP,SUBTOTAL,Notrans,uruttrans)
-    VALUES ( :noumb , :noretur , :tanggal , :noso , :valas , :kurs , :dpp , :ppn , :username , :kodesupp , :subtotal , :nobukti , :urut) " , [
-      "noumb" => $req->noumb,
-      "noretur" => $noBukti[0]->Nobukti,
-      "tanggal" => $req->tanggal,
-      "noso" => $req->noso,
-      "valas" => $req->valas,
-      "kurs" => $req->kurs,
-      "dpp" => $req->dpp,
-      "ppn" => $req->ppn,
-      "username" => $username,
-      "kodesupp" => $req->kodesupp,
-      "subtotal" => $req->subtotal,
-      "nobukti" => $req->nobukti,
-      "urut" => $req->urut,
-
-    ]);
+        // $listData = DB::connection('SML')->select("select Perkiraan, Keterangan , Simbol from DBPERKIRAAN where Perkiraan like '1111%' and Tipe = 1");
+        $listData = DB::connection('SML')->select("select a.* , b.Urut, b.Perkiraan  from DBCOST a left outer join DBPERKCOST b on a.KodeCost = b.KodeCost
+  where b.Perkiraan = :lawan
+  ", ["lawan" => $req->kodelawan]);
 
 
-    $listData = DB::connection('SML')->select("Select *,Nobukti+Noretur KeyBukti,
+        return $listData;
+    }
+
+    public function listSubCosting(Request $req)
+    {
+
+        // $listData = DB::connection('SML')->select("select Perkiraan, Keterangan , Simbol from DBPERKIRAAN where Perkiraan like '1111%' and Tipe = 1");
+        $listData = DB::connection('SML')->select("select * from vwSubCost where KodeCost = :kodecosting
+
+  ", ["kodecosting" => $req->kodecosting]);
+
+
+        return $listData;
+    }
+
+
+    public function spAddDPPDPH(Request $req)
+    {
+        $username = \Auth::user()->username;
+
+        $jmlrecord = $req->jmlrecord;
+
+
+        if ($jmlrecord == 0) {
+            $check = DB::connection('SML')->select('select * from DBTRANS where Nobukti = :nobukti', ["nobukti" => $req->nobukti]);
+            if ($check) {
+                return 2;
+            }
+        }
+
+        $tempData = DB::connection('SML')->select('exec SP_ViewDPH ?,?,?,?,?', [
+            $req->dppdph,
+            $req->valas,
+            $req->nodph,
+            $req->perkiraan,
+            $req->custsupp
+
+        ]);
+
+        // return $tempData;
+
+        // $outstandingReguler = DB::connection("SML")->select('exec sp_sosiapkirim ?,?,?',[ $periode->bulan , $periode->tahun ,\Auth::user()->username ]);
+        $plok = DB::connection("SML")->select("Select ISnull(IsLokalOrExim,0) IsLokalOrExim from dbPostHutpiut where perkiraan= :lawan
+    ", ["lawan" => $req->lawanx]);
+
+        // Jumlah yang diketik user dialokasikan ke baris dokumen sesuai urutan SP_ViewDPH: tiap baris
+        // dibukukan penuh sampai jumlah habis, baris terakhir dipotong sisanya, sisanya dilewati.
+        // Jumlah sama dengan total dokumen (atau kosong) = perilaku lama, semua baris dibukukan penuh.
+        $totalDibayar = 0.0;
+        foreach ($tempData as $d) {
+            $totalDibayar += (float) $d->DIBAYAR - $d->debetrp;
+        }
+        $totalDibayar = round($totalDibayar, 2);
+        $jumlahInput = $req->jumlah === null ? 0.0 : round((float) $req->jumlah, 2);
+
+        Log::info($totalDibayar); // buat print hasil
+
+        $baris = [];
+        if ($jumlahInput <= 0 || abs($jumlahInput - $totalDibayar) < 0.005) {
+            foreach ($tempData as $d) {
+                $baris[] = [$d, (float) ($d->DIBAYAR - $d->debetrp)];
+            }
+        } elseif ($jumlahInput > $totalDibayar) {
+            return 3; // melebihi total dokumen
+
+        } else {
+            $sisa = $jumlahInput;
+            foreach ($tempData as $d) {
+                $nilai = round(min((float) $d->DIBAYAR, $sisa), 2);
+                if ($nilai <= 0) {
+                    continue;
+                }
+                $baris[] = [$d, $nilai];
+                $sisa = round($sisa - $nilai, 2);
+            }
+            if (!count($baris)) {
+                return 3;
+            }
+        }
+
+        foreach ($baris as [$d, $nilaiDibayar]) {
+            // return [
+            //   'a' => $d->DIBAYAR,
+            //   'b' => $req->kurs
+            // ];
+
+            DB::connection('SML')->statement('exec sp_TransaksiKasBankDPH ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?', [
+                $req->choice,
+                $req->nobukti,
+                $req->nourut,
+                $req->tanggal,
+                $req->note ? $req->note : '',
+                $req->lampiran ? $req->lampiran : '',
+                $req->kodedevisi,
+                $req->perkiraanx,
+                $req->lawanx,
+                $req->keterangan ? $req->keterangan : '', // 10
+                $req->keterangan2 ? $req->keterangan2 : '',
+                $nilaiDibayar,
+                $req->kredit,
+                $req->valas,
+                $req->kurs,
+                $nilaiDibayar * (float) $req->kurs,
+                $req->kreditrp,
+                $req->transaksi,
+                $req->tphc,
+                $req->custsuppP ? $req->custsuppP : '', // 20
+                $req->custsuppL ? $req->custsuppL : '',
+                $req->urut,
+                $req->noaktivaP ? $req->noaktivaP : '',
+                $req->noaktivaL ? $req->noaktivaL : '',
+                $req->statusaktivaP ? $req->statusaktivaP : '',
+                $req->statusaktivaL ? $req->statusaktivaL : '',
+                $req->nobon ? $req->nobon : '',
+                $req->kodedepartemen,
+                $req->kodeP ? $req->kodeP : '',
+                $req->kodeL ? $req->kodeL : '', // 30
+                $req->statusgiro ? $req->statusgiro : '',
+                $req->simbol,
+                $req->kodeperkiraan,
+                $req->flagsimbol ? $req->flagsimbol : '',
+                $req->kodecost ? $req->kodecost : '',
+                $req->kodesubcost ? $req->kodesubcost : '',
+                $req->nodph ?   $req->nodph : '',
+                $d->Urut,
+                $req->dppdph ? $req->dppdph : '', // 40
+                $username,
+                $d->Tp ? $d->Tp : '',
+                $req->ppklx ? $req->ppklx : '',
+                $d->NOFAKTUR ? $d->NOFAKTUR  : '',
+                $plok[0]->IsLokalOrExim,
+                $req->nobons ? $req->nobons : '',
+                $jmlrecord,
+                $req->notitipan ? $req->notitipan : '',
+                $req->uruttitipan,
+                $req->keterangandetail ? $req->keterangandetail : '', // 50
+                $req->pSKB,
+
+            ]);
+
+            $jmlrecord = 1;
+        }
+
+        return 1;
+    }
+
+
+
+
+    public function spAddTempRUMJUAL(Request $req)
+    {
+        $username = \Auth::user()->username;
+        $periode = DB::connection("SML")->select('select TOP 1 * from DBPERIODE where user_id = :username ', ["username" => $username]);
+        $kode = 'RUM';
+        $inisial = DB::connection("SML")->select('select ' . $kode . ' from DBNOMOR');
+        // $inisialx = 'KN';
+        // return $inisialx;
+        $values = [
+            $inisial[0]->$kode,
+            $periode[0]->bulan,
+            $periode[0]->tahun,
+            $username
+        ];
+
+        $noBukti = DB::connection('SML')->select('exec SP_IsiNobuktiSimbol ?,?,?,?', $values);
+
+        $res = DB::connection('SML')->update("insert into tempRUMJual (NOBUKTI,NORETUR,TANGGAL,NOSO,VALAS,KURS,DPP,PPN,IDUSER,KODESUPP,SUBTOTAL,Notrans,uruttrans)
+    VALUES ( :noumb , :noretur , :tanggal , :noso , :valas , :kurs , :dpp , :ppn , :username , :kodesupp , :subtotal , :nobukti , :urut) ", [
+            "noumb" => $req->noumb,
+            "noretur" => $noBukti[0]->Nobukti,
+            "tanggal" => $req->tanggal,
+            "noso" => $req->noso,
+            "valas" => $req->valas,
+            "kurs" => $req->kurs,
+            "dpp" => $req->dpp,
+            "ppn" => $req->ppn,
+            "username" => $username,
+            "kodesupp" => $req->kodesupp,
+            "subtotal" => $req->subtotal,
+            "nobukti" => $req->nobukti,
+            "urut" => $req->urut,
+
+        ]);
+
+
+        $listData = DB::connection('SML')->select("Select *,Nobukti+Noretur KeyBukti,
     (select top 1 nilaippn/100.00 from dbnilaippn where GETDATE() between tglawal and tglakhir) ppnx
     , (select sum(DPP) SubTotal from tempRUMJual where IDUser= :username1 ) totalqntx
     from tempRUMJual
-    WHERE KODESUPP= :custsupp and IDuser= :username order by nobukti , noretur", ["custsupp" => $req->kodesupp ,"username1" =>  \Auth::user()->username ,"username" =>  \Auth::user()->username]);
+    WHERE KODESUPP= :custsupp and IDuser= :username order by nobukti , noretur", ["custsupp" => $req->kodesupp, "username1" =>  \Auth::user()->username, "username" =>  \Auth::user()->username]);
 
-    return $listData;
-  }
+        return $listData;
+    }
 
-  public function spDeleteTempRUMJUAL (Request $req) {
+    public function spDeleteTempRUMJUAL(Request $req)
+    {
 
-    // delete TempRumJual where nobukti=:0 and Noretur=:1
-    $username = \Auth::user()->username;
-    $res = DB::connection('SML')->update("delete TempRumJual where nobukti= :nobukti and Noretur= :noretur and IDUSER = :username", ["nobukti" => $req->noumb ,"noretur" => $req->noretur,  "username" =>  \Auth::user()->username]);
+        // delete TempRumJual where nobukti=:0 and Noretur=:1
+        $username = \Auth::user()->username;
+        $res = DB::connection('SML')->update("delete TempRumJual where nobukti= :nobukti and Noretur= :noretur and IDUSER = :username", ["nobukti" => $req->noumb, "noretur" => $req->noretur,  "username" =>  \Auth::user()->username]);
 
 
 
-    $listData = DB::connection('SML')->select("Select *,Nobukti+Noretur KeyBukti,
+        $listData = DB::connection('SML')->select("Select *,Nobukti+Noretur KeyBukti,
     (select top 1 nilaippn/100.00 from dbnilaippn where GETDATE() between tglawal and tglakhir) ppnx
     , (select sum(DPP) SubTotal from tempRUMJual where IDUser= :username1 ) totalqntx
     from tempRUMJual
-    WHERE KODESUPP= :custsupp and IDuser= :username order by nobukti , noretur", ["custsupp" => $req->kodesupp , "username1" =>  \Auth::user()->username ,"username" =>  \Auth::user()->username]);
+    WHERE KODESUPP= :custsupp and IDuser= :username order by nobukti , noretur", ["custsupp" => $req->kodesupp, "username1" =>  \Auth::user()->username, "username" =>  \Auth::user()->username]);
 
-    return $listData;
-  }
+        return $listData;
+    }
 
-  public function spUpdateTempRUMJUAL (Request $req) {
-    $username = \Auth::user()->username;
-    $res = DB::connection('SML')->update("update TEMPRUMJUAL set DPP = :dpp , PPN = :ppn , subtotal = :subtotal where nobukti= :nobukti and Noretur= :noretur and IDUSER = :username",
-    [
-      "dpp" => $req->dpp,
-      "ppn" => $req->ppn,
-      "subtotal" => $req->subtotal,
-      "nobukti" => $req->noumb ,
-      "noretur" => $req->noretur ? $req->noretur : '' ,
-      "username" =>  \Auth::user()->username
-    ]);
+    public function spUpdateTempRUMJUAL(Request $req)
+    {
+        $username = \Auth::user()->username;
+        $res = DB::connection('SML')->update(
+            "update TEMPRUMJUAL set DPP = :dpp , PPN = :ppn , subtotal = :subtotal where nobukti= :nobukti and Noretur= :noretur and IDUSER = :username",
+            [
+                "dpp" => $req->dpp,
+                "ppn" => $req->ppn,
+                "subtotal" => $req->subtotal,
+                "nobukti" => $req->noumb,
+                "noretur" => $req->noretur ? $req->noretur : '',
+                "username" =>  \Auth::user()->username
+            ]
+        );
 
-    $listData = DB::connection('SML')->select("Select *,Nobukti+Noretur KeyBukti,
+        $listData = DB::connection('SML')->select("Select *,Nobukti+Noretur KeyBukti,
     (select top 1 nilaippn/100.00 from dbnilaippn where GETDATE() between tglawal and tglakhir) ppnx,
     (select sum(DPP) SubTotal from tempRUMJual where IDUser= :username1 ) totalqntx
     from tempRUMJual
-    WHERE KODESUPP= :custsupp and IDuser= :username order by nobukti , noretur", ["custsupp" => $req->kodesupp ,"username1" =>  \Auth::user()->username ,"username" =>  \Auth::user()->username]);
+    WHERE KODESUPP= :custsupp and IDuser= :username order by nobukti , noretur", ["custsupp" => $req->kodesupp, "username1" =>  \Auth::user()->username, "username" =>  \Auth::user()->username]);
 
-    return $listData;
-  }
+        return $listData;
+    }
 
-  // Browse No Titipan untuk item BKK ber-Lawan 113400 (lihat buttonAddListTitipan() di kas.js).
-  // Pakai tanda kutip biasa, BUKAN backtick: di PHP backtick menjalankan isinya sebagai
-  // perintah shell.
-  public function getNoTitipan () {
+    // Browse No Titipan untuk item BKK ber-Lawan 113400 (lihat buttonAddListTitipan() di kas.js).
+    // Pakai tanda kutip biasa, BUKAN backtick: di PHP backtick menjalankan isinya sebagai
+    // perintah shell.
+    public function getNoTitipan()
+    {
 
-  $data = DB::connection('SML')->select("select 	A.NOBUKTI,  A.TANGGAL,A.Valas ,C.namaCustSupp,
+        $data = DB::connection('SML')->select("select 	A.NOBUKTI,  A.TANGGAL,A.Valas ,C.namaCustSupp,
                         (A.Debet+A.Kredit)*A.Kurs JumlahRp ,A.Keterangan  ,
                        A.debet - (isnull(d.Dibayar,0)+isnull(D.LB,0))-ISNULL(E.DEBET,0) Sisa,A.URUT,A.Debet,C.KodeCustSupp
                        from dbTransaksi A
@@ -1414,6 +1463,6 @@ $data['Kurs_'],
                        where A.Lawan=  '113400'AND A.CustSuppL<> ''     and A.TANGGAL>  '03/28/2016'
                        and    A.debet - (isnull(d.Dibayar,0)+isnull(D.LB,0))-ISNULL(E.DEBET,0) >0 and a.tipetrans in ('BKM')");
 
-    return $data;
-  }
+        return $data;
+    }
 }

@@ -1145,9 +1145,6 @@ function buttonAddPickSubCosting (index, kode, nama) {
   // $("#form").modal('toggle')
 }
 
-function onclickPSKB () {
-
-}
 
 
 function formatAngkaParse (angka) {
@@ -1248,7 +1245,6 @@ function cleanFormAddAdd () {
 
   document.getElementById("AddAddLawan").value = ''
   $('#buttonBukaTunai').hide()
-  document.getElementById("checkBoxSKB").checked = false
   document.getElementById("AddAddKeteranganLawan").value = ''
   document.getElementById("AddAddJumlah").value = '0.00'
   document.getElementById("AddAddKeterangan").value = ''
@@ -1406,10 +1402,6 @@ function submitAddAdd () {
   let jmlrecord = tipeform == 'add' ? 0 : 1
   let notitipan = ''
   let uruttitipan = 0
-  let pSKB = 0
-  if (document.getElementById("checkBoxSKB").checked) {
-    pSKB = 1
-  }
   let perkiraanx = transaksi == 'BKK' ? lawan : kodeperkiraan
   let lawanx = transaksi == 'BKK' ? kodeperkiraan : lawan
 
@@ -1617,7 +1609,6 @@ function submitAddAdd () {
   // jmlrecord,
   // notitipan ,
   // uruttitipan,
-  // pSKB,
   // custsupp})
 
 
@@ -1691,7 +1682,6 @@ function submitAddAdd () {
           jmlrecord,
           notitipan ,
           uruttitipan,
-          pSKB,
           custsupp
         },
         success: function(res) {
@@ -1796,7 +1786,6 @@ function submitAddAdd () {
           jmlrecord,
           notitipan ,
           uruttitipan,
-          pSKB,
           custsupp
         },
         success: function(res) {
@@ -1901,7 +1890,6 @@ function submitAddAdd () {
           jmlrecord,
           notitipan ,
           uruttitipan,
-          pSKB,
           custsupp
         },
         success: function(res) {
@@ -2009,7 +1997,6 @@ function submitAddAdd () {
           jmlrecord,
           notitipan ,
           uruttitipan,
-          pSKB,
           custsupp
         },
         success: function(res) {
@@ -2113,7 +2100,6 @@ function submitAddAdd () {
           jmlrecord,
           notitipan ,
           uruttitipan,
-          pSKB,
           custsupp
         },
         success: function(res) {
@@ -2249,10 +2235,6 @@ function submitAddEdit () {
   let jmlrecord = tipeform == 'add' ? 0 : 1
   let notitipan = tempBarangAddEdit.notitipan
   let uruttitipan = tempBarangAddEdit.URUTTITIPAN
-  let pSKB = 0
-  if (document.getElementById("checkBoxSKB").checked) {
-    pSKB = 1
-  }
   let perkiraanx = transaksi == 'BKK' ? lawan : kodeperkiraan
   let lawanx = transaksi == 'BKK' ? kodeperkiraan : lawan
 
@@ -2323,8 +2305,7 @@ function submitAddEdit () {
     nobons,
     jmlrecord,
     notitipan ,
-    uruttitipan,
-    pSKB
+    uruttitipan
   })
 
 
@@ -2394,8 +2375,7 @@ function submitAddEdit () {
         nobons,
         jmlrecord,
         notitipan ,
-        uruttitipan,
-        pSKB
+        uruttitipan
       },
       success: function(res) {
         console.log(res ,'!')
@@ -2515,15 +2495,8 @@ function buttonAddDelete (index) {
           let jmlrecord = tipeform == 'add' ? 0 : 1
           let notitipan = tempBarangAddEdit.notitipan
           let uruttitipan = tempBarangAddEdit.URUTTITIPAN
-          let pSKB = 0
           let perkiraanx = transaksi == 'BKK' ? lawan : kodeperkiraan
           let lawanx = transaksi == 'BKK' ? kodeperkiraan : lawan
-
-
-
-
-
-
 
           console.log({
             tipeform,
@@ -2574,8 +2547,7 @@ function buttonAddDelete (index) {
             nobons,
             jmlrecord,
             notitipan ,
-            uruttitipan,
-            pSKB
+            uruttitipan
           })
 
 
@@ -2645,8 +2617,7 @@ function buttonAddDelete (index) {
                 nobons,
                 jmlrecord,
                 notitipan ,
-                uruttitipan,
-                pSKB
+                uruttitipan
               },
               success: function(res) {
                 console.log(res ,'!')
@@ -5777,10 +5748,8 @@ function refreshDataTable (nobukti) {
 
 
 
-                  <td>${item.TPHC}</td>
                   <td class="text-right">${item.DebetRp ?  formatAngka(parseFloat(item.DebetRp).toFixed(2)) : '0.00'}</td>
                   <td>${item.Keterangan }</td>
-                  <td class="text-right">${item.JumlahGiroRp ? formatAngka(parseFloat(item.JumlahGiroRp).toFixed(2)) : '0.00'}</td>
                   <td>${item.NamaCost ? item.NamaCost : '' }</td>
                   <td>${item.NamaSubCost ? item.NamaSubCost : ''}</td>
                   <td class="text-center">
@@ -5888,10 +5857,8 @@ function refreshDataTableDetail (nobukti) {
 
 
 
-                  <td>${item.TPHC}</td>
                   <td class="text-right">${item.DebetRp ?  formatAngka(parseFloat(item.DebetRp).toFixed(2)) : '0.00'}</td>
                   <td>${item.Keterangan }</td>
-                  <td class="text-right">${item.JumlahGiroRp ? formatAngka(parseFloat(item.JumlahGiroRp).toFixed(2)) : '0.00'}</td>
                   <td>${item.NamaCost ? item.NamaCost : '' }</td>
                   <td>${item.NamaSubCost ? item.NamaSubCost : ''}</td>
 
@@ -6283,12 +6250,6 @@ function buttonAddEditItem (i) {
 
   document.getElementById("AddAddKodeSubCosting").value = tempBarangAddEdit.KODESUBCOST ? tempBarangAddEdit.KODESUBCOST : ''
   document.getElementById("AddAddNamaSubCosting").value = tempBarangAddEdit.NamaSubCost ? tempBarangAddEdit.NamaSubCost : ''
-
-  if (Number(tempBarangAddEdit.pSKB) == 1) {
-    document.getElementById("checkBoxSKB").checked = true
-  } else {
-    document.getElementById("checkBoxSKB").checked = false
-  }
 
   kasPilihOpsi('AddAddValas', tempBarangAddEdit.Valas)
   document.getElementById("AddAddKurs").value = parseFloat(tempBarangAddEdit.Kurs).toFixed(2)

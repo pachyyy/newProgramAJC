@@ -1524,6 +1524,7 @@ $iconMap = [
         })();
     </script>
     @include('partials.ajax-error-logger')
+    @include('partials.user-filter')
     @yield('js')
 </body>
 

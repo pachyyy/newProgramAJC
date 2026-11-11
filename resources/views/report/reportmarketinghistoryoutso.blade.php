@@ -317,17 +317,7 @@
                 return (v == null ? '' : v);
             }));
             const rows = [header].concat(body);
-            const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n');
-            const ext = (fmt === 'Excel') ? 'xls' : 'csv';
-            const blob = new Blob(['﻿' + csv], {
-                type: 'text/csv;charset=utf-8;'
-            });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'OutstandingHistorySO_' + (globalDate2 || '') + '.' + ext;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            ReportExport.fromRows(rows, fmt, { customName: 'OutstandingHistorySO_' + (globalDate2 || '') });
             showToast('📄', 'Data diekspor sebagai ' + fmt);
         }
 

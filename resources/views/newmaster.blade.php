@@ -1255,6 +1255,7 @@ function goHome() {
   <script src="{!! URL::asset('js/otorisasi-push.js') !!}?v={{ @filemtime(base_path('public/js/otorisasi-push.js')) ?: '1' }}"></script>
 
   @include('partials.ajax-error-logger')
+  @include('partials.user-filter')
   @yield('js')
 </body>
 </html>

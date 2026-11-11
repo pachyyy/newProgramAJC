@@ -888,13 +888,7 @@
       return (r[c[0]] == null ? '' : r[c[0]]);
     }));
     const rowsCsv = [header].concat(body);
-    const csv = rowsCsv.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n');
-
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'LaporanMutasiStokPerMerk_' + ($('#inputDate1').val() || '') + '.' + (fmt === 'Excel' ? 'xls' : 'csv');
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    ReportExport.fromRows(rowsCsv, fmt, { customName: 'LaporanMutasiStokPerMerk_' + ($('#inputDate1').val() || '') });
     showToast('📄', 'Data diekspor sebagai ' + fmt);
   }
 

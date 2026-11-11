@@ -664,18 +664,7 @@
                 });
             });
 
-            const csv = out.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n');
-            const ext = (fmt === 'Excel') ? 'xls' : 'csv';
-            const blob = new Blob(['﻿' + csv], {
-                type: 'text/csv;charset=utf-8;'
-            });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'BukuBesar_' + ($("#inputDate1").val() || '') + '_sd_' + ($("#inputDate2").val() || '') + '.' +
-                ext;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            ReportExport.fromRows(out, fmt, { customName: 'BukuBesar_' + ($("#inputDate1").val() || '') + '_sd_' + ($("#inputDate2").val() || '') });
             showToast('📄', 'Data diekspor sebagai ' + fmt);
         }
 

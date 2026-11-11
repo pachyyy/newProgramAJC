@@ -501,15 +501,7 @@
       return (v == null ? '' : v);
     }));
 
-    const csv = [header].concat(body)
-      .map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(','))
-      .join('\n');
-
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'ReportClosingOpname.' + (fmt === 'Excel' ? 'xls' : 'csv');
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    ReportExport.fromRows([header].concat(body), fmt, { customName: 'ReportClosingOpname' });
   }
 </script>
 

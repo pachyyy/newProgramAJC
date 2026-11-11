@@ -87,6 +87,15 @@ rel="stylesheet">
                 text-transform: uppercase;
                 transition: background-color 0.3s, box-shadow 0.3s;
                 box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);" onclick="doExportTableToExcel('tabel')">Export to Excel</button>
+              <button type="button" class="btn btn-success" style="
+                height: 30px; 
+                padding: 4px 12px; 
+                border-radius: 20px; 
+                font-size: 0.75rem; 
+                font-weight: 600; 
+                text-transform: uppercase; 
+                transition: background-color 0.3s, box-shadow 0.3s;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);" onclick="doExportTableToCsv('tabel')">Export to CSV</button>
               <button type="button" class="btn btn-danger" style="
                 height: 30px;
                 padding: 4px 12px;
@@ -232,6 +241,8 @@ rel="stylesheet">
      siap dipakai halaman anak. --}}
 <script src="{!! URL::asset('js/report-table.js') !!}?v={{ @filemtime(base_path('public/js/report-table.js')) ?: '1' }}"></script>
 @yield('jsreport')
+<script src="{{ asset('js/exceljs.min.js') }}?v={{ filemtime(public_path('js/exceljs.min.js')) }}"></script>
+<script src="{{ asset('js/report-export.js') }}?v={{ filemtime(public_path('js/report-export.js')) }}"></script>
 <script type="text/javascript">
   var g_href = '{!! $akses['href'] !!}';
 
@@ -1313,49 +1324,15 @@ rel="stylesheet">
 
 
 
+  // Export Excel (.xlsx) & CSV — logika bersama ada di public/js/report-export.js
   function doExportTableToExcel(tableID, filename = '') {
     if (document.getElementById("showTableReport").style.display === "none") { return; }
-    var downloadLink;
-    var dataType = 'application/vnd.ms-excel';
-    var tableSelect = document.getElementById(tableID);
+    ReportExport.toXlsx(tableID || 'tabel', { baseName: @json($akses['xlsfilename']), customName: filename || gxls_filename });
+  }
 
-    // Clone the table so original is untouched
-    var tableClone = tableSelect.cloneNode(true);
-
-    // Apply mso-number-format to all TDs
-    var tds = tableClone.querySelectorAll('td');
-    tds.forEach(function(td) {
-        td.setAttribute('style', "mso-number-format:'\\@';");
-    });
-
-    var tableHTML = tableClone.outerHTML.replace(/ /g, '%20').replace(/#/g, encodeURIComponent('#'));
-    var _name = '{!! $akses['xlsfilename'] !!}';
-    var _date = getDateNow();
-    var _time = getTimeNow("");
-
-    // Specify file name
-    gxls_filename = gxls_filename  ?  gxls_filename +'.xls'  :  _name+'_'+_date+'_'+_time+'.xls';
-
-    // Create download link element
-    downloadLink = document.createElement("a");
-
-    document.body.appendChild(downloadLink);
-
-    if(navigator.msSaveOrOpenBlob){
-        var blob = new Blob(['\ufeff', tableHTML], {
-            type: dataType
-        });
-        navigator.msSaveOrOpenBlob( blob, gxls_filename);
-    }else{
-        // Create a link to the file
-        downloadLink.href = 'data:' + dataType + ', ' + tableHTML;
-
-        // Setting the file name
-        downloadLink.download = gxls_filename;
-
-        //triggering the function
-        downloadLink.click();
-    }
+  function doExportTableToCsv(tableID, filename = '') {
+    if (document.getElementById("showTableReport").style.display === "none") { return; }
+    ReportExport.toCsv(tableID || 'tabel', { baseName: @json($akses['xlsfilename']), customName: filename || gxls_filename });
   }
 
 </script>

@@ -575,11 +575,7 @@
       const cols = gcart_header.filter(c => c[2] === 1);
       const header = cols.map(c => c[1]);
       const body = rowsShown().map(r => cols.map(c => c[3] === 'float' || c[3] === 'int' ? currencyNormalizer(r[c[0]]) : (r[c[0]] || '')));
-      const csv = [header].concat(body).map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n');
-      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-      a.download = 'LaporanKartuOpname.' + (fmt === 'Excel' ? 'xls' : 'csv');
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      ReportExport.fromRows([header].concat(body), fmt, { customName: 'LaporanKartuOpname' });
     }
   }
 </script>

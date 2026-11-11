@@ -1,4 +1,4 @@
-@extends('report.masterreport2')
+@extends('report.masterreport2x')
 
 {{-- Table styling lives in public/css/report-table.css (loaded via report/newmaster2.blade.php).
      .checkmark-red is also defined there. Only the (disabled) Tolakan dropdown-toggle and the
@@ -324,25 +324,19 @@
   function doExport(fmt) {
     document.getElementById('exportDrop').classList.remove('open');
     if (fmt === 'Print') { window.print(); return; }
-    exportDelimited(fmt);
-  }
-  function exportDelimited(fmt) {
-    const cols = gcart_header.filter(c => c[2] === 1);
-    const header = cols.map(c => c[1]);
-    const body = (lastRows || []).map(r => cols.map(function (c) {
-      if (c[3] === 'date') return format_date(r[c[0]]);
-      if (c[3] === 'float' || c[3] === 'int') return currencyNormalizer(r[c[0]]);
-      return (r[c[0]] == null ? '' : r[c[0]]);
-    }));
-    const rows = [header].concat(body);
-    const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n');
-    const ext = (fmt === 'Excel') ? 'xls' : 'csv';
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'KasHarian_' + (g_date1 || '') + '_' + (g_date2 || '') + '.' + ext;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    showToast('📄', 'Data diekspor sebagai ' + fmt);
+
+    // masterreport2x memuat public/js/report-export.js (ReportExport). Sumbernya tabel yang
+    // tampil (#mainTable, termasuk ringkasan saldo di #kasSummary), bukan lastRows mentah.
+    if (!lastRows || !lastRows.length) { showToast('⚠️', 'Belum ada data. Klik Tampilkan dulu.'); return; }
+
+    const opts = {
+      baseName:   'KasHarian',
+      customName: 'KasHarian_' + (g_date1 || '') + '_' + (g_date2 || ''),
+      sheetName:  'Kas Harian'
+    };
+    if (fmt === 'Excel') { ReportExport.toXlsx('mainTable', opts); }
+    else                 { ReportExport.toCsv('mainTable', opts); }
+    showToast('📄', 'Data diekspor sebagai ' + (fmt === 'Excel' ? 'XLSX' : 'CSV'));
   }
 
   /* ── LOAD DATA: saldo awal dulu (untuk footer), lalu data baris ── */

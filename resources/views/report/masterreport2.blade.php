@@ -87,6 +87,15 @@ rel="stylesheet">
                 text-transform: uppercase;
                 transition: background-color 0.3s, box-shadow 0.3s;
                 box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);" onclick="doExportTableToExcel('tabel')">Export to Excel</button>
+              <button type="button" class="btn btn-success" style="
+                height: 30px; 
+                padding: 4px 12px; 
+                border-radius: 20px; 
+                font-size: 0.75rem; 
+                font-weight: 600; 
+                text-transform: uppercase; 
+                transition: background-color 0.3s, box-shadow 0.3s;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);" onclick="doExportTableToCsv('tabel')">Export to CSV</button>
               <button type="button" class="btn btn-danger" style="
                 height: 30px;
                 padding: 4px 12px;
@@ -227,6 +236,8 @@ rel="stylesheet">
      dimuat lagi — isinya sudah digabung ke sini. --}}
 <script src="{!! URL::asset('js/report-table.js') !!}?v={{ @filemtime(base_path('public/js/report-table.js')) ?: '1' }}"></script>
 @yield('jsreport')
+<script src="{{ asset('js/exceljs.min.js') }}?v={{ filemtime(public_path('js/exceljs.min.js')) }}"></script>
+<script src="{{ asset('js/report-export.js') }}?v={{ filemtime(public_path('js/report-export.js')) }}"></script>
 <script type="text/javascript">
   var g_href = '{!! $akses['href'] !!}';
 
@@ -1593,38 +1604,13 @@ rel="stylesheet">
 
 
 
-  function doExportTableToExcel(tableID) {
-    var downloadLink;
-    var dataType = 'application/vnd.ms-excel';
-    var tableSelect = document.getElementById(tableID);
-    var tableHTML = tableSelect.outerHTML.replace(/ /g, '%20');
-    var _name = '{!! $akses['xlsfilename'] !!}';
-    var _date = getDateNow();
-    var _time = getTimeNow("");
+  // Export Excel (.xlsx) & CSV — logika bersama ada di public/js/report-export.js
+  function doExportTableToExcel(tableID, filename = '') {
+    ReportExport.toXlsx(tableID || 'tabel', { baseName: @json($akses['xlsfilename']), customName: filename || gxls_filename });
+  }
 
-    // Specify file name
-    gxls_filename = gxls_filename  ?  gxls_filename +'.xls'  :  _name+'_'+_date+'_'+_time+'.xls';
-
-    // Create download link element
-    downloadLink = document.createElement("a");
-
-    document.body.appendChild(downloadLink);
-
-    if(navigator.msSaveOrOpenBlob){
-        var blob = new Blob(['\ufeff', tableHTML], {
-            type: dataType
-        });
-        navigator.msSaveOrOpenBlob( blob, gxls_filename);
-    }else{
-        // Create a link to the file
-        downloadLink.href = 'data:' + dataType + ', ' + tableHTML;
-
-        // Setting the file name
-        downloadLink.download = gxls_filename;
-
-        //triggering the function
-        downloadLink.click();
-    }
+  function doExportTableToCsv(tableID, filename = '') {
+    ReportExport.toCsv(tableID || 'tabel', { baseName: @json($akses['xlsfilename']), customName: filename || gxls_filename });
   }
 
 </script>

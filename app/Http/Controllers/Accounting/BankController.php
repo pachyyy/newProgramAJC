@@ -11,6 +11,7 @@ use App\Model\NewPeriode;
 use App\Model\NewUsers;
 use Illuminate\Support\Facades\DB;
 use App\Services\OtorisasiService;
+use Illuminate\Support\Facades\Log;
 
 class BankController extends Controller
 
@@ -523,15 +524,15 @@ where b.Perkiraan = :lawan
   public function listDPH (Request $req) {
 
     $listData = DB::connection('SML')->select("select D.Nobukti,e.NOBUKTI NOUM,A.KODECUSTSUPP,C.NAMACUSTSUPP
-                          ,D.Valas,Sum(A.DIBAYAR) DIBAYAR ,X.KL,SUM(LB) LB
+                          ,D.Valas,Sum(A.DIBAYAR)  - b.DebetRp DIBAYAR ,X.KL,SUM(LB) LB
                                from DBDPHDET A
-                           Left Outer Join dbTransaksi B on A.NoBukti=B.NODPH and A.KodeCUstSupp=B.CustSUppP
+                           Left Outer Join (select NODPH, CustSuppP, Sum(DebetRp) DebetRp from dbTransaksi group by NODPH, CustSuppP) B on A.NoBukti=B.NODPH and A.KodeCUstSupp=B.CustSUppP
                            Left OUter Join DBCUSTSUPP C on A.KODECUSTSUPP=C.KODECUSTSUPP
                            Left Outer JOin DbDPH D on A.Nobukti=D.Nobukti
                            Left Outer Join (select nobukti,KodeCustSupp,Sum(NilaiK) KL from DBKurangBayar group by  nobukti,KodeCustSupp)  X on A.nobukti=X.Nobukti and A.KodeCustSupp=X.kodeCustSupp
                          left outer join (select nobukti,noso from dbUMjual group by nobukti,noso) E on a.nofaktur=e.nobukti
                          left outer join (select nopohd from dbbeli group by NOPOHD) F on e.noso=f.nopohd
-                           where B.NoBukti Is null       and f.nopohd is null
+                           where f.nopohd is null
                          And D.Tipe= 'DPH'   and  D.Valas= :valas
                            and Cast(Case when Case when D.IsOtorisasi1=1 then 1 else 0 end+
                            Case when D.IsOtorisasi2=1 then 1 else 0 end+
@@ -541,7 +542,8 @@ where b.Perkiraan = :lawan
                                           else 1
                                      end As Bit)=0   --and E.nobukti is not null
                             group by D.Nobukti,A.KODECUSTSUPP,C.NAMACUSTSUPP,E.nobukti
-                          ,D.Valas,X.kl" , ["valas" => $req->valas ]);
+                          ,D.Valas,X.kl,  b.DebetRp
+                          having Round(Sum(A.DIBAYAR) - IsNull(Max(B.DebetRp), 0), 2) <> 0" , ["valas" => $req->valas ]);
     return $listData;
   }
 
@@ -1100,134 +1102,136 @@ WHERE KODESUPP= :custsupp and IDuser= :username", ["custsupp" => $req->custsupp 
   }
 
 
-  public function spAddDPPDPH (Request $req) {
+  public function spAddDPPDPH(Request $req)
+    {
+        $username = \Auth::user()->username;
+
+        $jmlrecord = $req->jmlrecord;
 
 
-      $username = \Auth::user()->username;
-
-      $jmlrecord = $req->jmlrecord;
-
-
-      if ($jmlrecord == 0) {
-        $check = DB::connection('SML')->select('select * from DBTRANSAKSI where Nobukti = :nobukti',["nobukti" => $req->nobukti]);
-          if ($check) {
-            return 2;
+        if ($jmlrecord == 0) {
+            $check = DB::connection('SML')->select('select * from DBTRANS where Nobukti = :nobukti', ["nobukti" => $req->nobukti]);
+            if ($check) {
+                return 2;
+            }
         }
-      }
 
-      $tempData = DB::connection('SML')->select('exec SP_ViewDPH ?,?,?,?,?' , [
-        $req->dppdph,
-        $req->valas,
-        $req->nodph,
-        $req->perkiraan,
-        $req->custsupp
-
-      ]);
-
-      // return $tempData;
-
-      // $outstandingReguler = DB::connection("SML")->select('exec sp_sosiapkirim ?,?,?',[ $periode->bulan , $periode->tahun ,\Auth::user()->username ]);
-      $plok = DB::connection("SML")->select("Select ISnull(IsLokalOrExim,0) IsLokalOrExim from dbPostHutpiut where perkiraan= :lawan
-    " , ["lawan" => $req->lawanx]);
-
-      // Jumlah yang diketik user dialokasikan ke baris dokumen sesuai urutan SP_ViewDPH: tiap baris
-      // dibukukan penuh sampai jumlah habis, baris terakhir dipotong sisanya, sisanya dilewati.
-      // Jumlah sama dengan total dokumen (atau kosong) = perilaku lama, semua baris dibukukan penuh.
-      $totalDibayar = 0.0;
-      foreach ($tempData as $d) {
-        $totalDibayar += (float) $d->DIBAYAR;
-      }
-      $totalDibayar = round($totalDibayar, 2);
-      $jumlahInput = $req->jumlah === null ? 0.0 : round((float) $req->jumlah, 2);
-
-      $baris = [];
-      if ($jumlahInput <= 0 || abs($jumlahInput - $totalDibayar) < 0.005) {
-        foreach ($tempData as $d) {
-          $baris[] = [$d, (float) $d->DIBAYAR];
-        }
-      } elseif ($jumlahInput > $totalDibayar) {
-        return 3; // melebihi total dokumen
-      } else {
-        $sisa = $jumlahInput;
-        foreach ($tempData as $d) {
-          $nilai = round(min((float) $d->DIBAYAR, $sisa), 2);
-          if ($nilai <= 0) {
-            continue;
-          }
-          $baris[] = [$d, $nilai];
-          $sisa = round($sisa - $nilai, 2);
-        }
-        if (!count($baris)) {
-          return 3;
-        }
-      }
-
-      foreach ($baris as [$d, $nilaiDibayar])  {
-        // return [
-        //   'a' => $d->DIBAYAR,
-        //   'b' => $req->kurs
-        // ];
-
-        DB::connection('SML')->statement('exec sp_TransaksiKasBankDPH ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?', [
-          $req->choice,
-          $req->nobukti,
-          $req->nourut,
-          $req->tanggal,
-          $req->note ? $req->note : '',
-          $req->lampiran ? $req->lampiran : '',
-          $req->kodedevisi,
-          $req->perkiraanx,
-          $req->lawanx,
-          $req->keterangan ? $req->keterangan : '', // 10
-          $req->keterangan2 ? $req->keterangan2 : '',
-          $nilaiDibayar,
-          $req->kredit,
-          $req->valas,
-          $req->kurs,
-          $nilaiDibayar * (float) $req->kurs,
-          $req->kreditrp,
-          $req->transaksi,
-          $req->tphc,
-          $req->custsuppP ? $req->custsuppP : '' , // 20
-          $req->custsuppL ? $req->custsuppL : '' ,
-          $req->urut,
-          $req->noaktivaP ? $req->noaktivaP : '' ,
-          $req->noaktivaL ? $req->noaktivaL : '' ,
-          $req->statusaktivaP ? $req->statusaktivaP : '',
-          $req->statusaktivaL ? $req->statusaktivaL : '',
-          $req->nobon ? $req->nobon : '',
-          $req->kodedepartemen,
-          $req->kodeP ? $req->kodeP : '',
-          $req->kodeL ? $req->kodeL : '', // 30
-          $req->statusgiro ? $req->statusgiro : '',
-          $req->simbol,
-          $req->kodeperkiraan,
-          $req->flagsimbol ? $req->flagsimbol : '',
-          $req->kodecost ? $req->kodecost : '',
-          $req->kodesubcost ? $req->kodesubcost : '',
-          $req->nodph ?   $req->nodph : '',
-          $d->Urut,
-          $req->dppdph ? $req->dppdph : '', // 40
-          $username,
-          $d->Tp ? $d->Tp : '',
-          $req->ppklx ? $req->ppklx : '',
-          $d->NOFAKTUR ? $d->NOFAKTUR  : '',
-          $plok[0]->IsLokalOrExim,
-          $req->nobons ? $req->nobons : '',
-          $jmlrecord,
-          $req->notitipan ? $req->notitipan : '',
-          $req->uruttitipan,
-          $req->keterangandetail ? $req->keterangandetail : '', // 50
-          $req->pSKB,
+        $tempData = DB::connection('SML')->select('exec SP_ViewDPH ?,?,?,?,?', [
+            $req->dppdph,
+            $req->valas,
+            $req->nodph,
+            $req->perkiraan,
+            $req->custsupp
 
         ]);
 
-        $jmlrecord = 1;
-      }
+        // return $tempData;
 
-      return 1;
+        // $outstandingReguler = DB::connection("SML")->select('exec sp_sosiapkirim ?,?,?',[ $periode->bulan , $periode->tahun ,\Auth::user()->username ]);
+        $plok = DB::connection("SML")->select("Select ISnull(IsLokalOrExim,0) IsLokalOrExim from dbPostHutpiut where perkiraan= :lawan
+    ", ["lawan" => $req->lawanx]);
 
-  }
+        // Jumlah yang diketik user dialokasikan ke baris dokumen sesuai urutan SP_ViewDPH: tiap baris
+        // dibukukan penuh sampai jumlah habis, baris terakhir dipotong sisanya, sisanya dilewati.
+        // Jumlah sama dengan total dokumen (atau kosong) = perilaku lama, semua baris dibukukan penuh.
+        $totalDibayar = 0.0;
+        foreach ($tempData as $d) {
+            $totalDibayar += (float) $d->DIBAYAR - $d->debetrp;
+        }
+        $totalDibayar = round($totalDibayar, 2);
+        $jumlahInput = $req->jumlah === null ? 0.0 : round((float) $req->jumlah, 2);
+
+        Log::info($totalDibayar); // buat print hasil
+
+        $baris = [];
+        if ($jumlahInput <= 0 || abs($jumlahInput - $totalDibayar) < 0.005) {
+            foreach ($tempData as $d) {
+                $baris[] = [$d, (float) ($d->DIBAYAR - $d->debetrp)];
+            }
+        } elseif ($jumlahInput > $totalDibayar) {
+            return 3; // melebihi total dokumen
+
+        } else {
+            $sisa = $jumlahInput;
+            foreach ($tempData as $d) {
+                $nilai = round(min((float) $d->DIBAYAR, $sisa), 2);
+                if ($nilai <= 0) {
+                    continue;
+                }
+                $baris[] = [$d, $nilai];
+                $sisa = round($sisa - $nilai, 2);
+            }
+            if (!count($baris)) {
+                return 3;
+            }
+        }
+
+        foreach ($baris as [$d, $nilaiDibayar]) {
+            // return [
+            //   'a' => $d->DIBAYAR,
+            //   'b' => $req->kurs
+            // ];
+
+            DB::connection('SML')->statement('exec sp_TransaksiKasBankDPH ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?', [
+                $req->choice,
+                $req->nobukti,
+                $req->nourut,
+                $req->tanggal,
+                $req->note ? $req->note : '',
+                $req->lampiran ? $req->lampiran : '',
+                $req->kodedevisi,
+                $req->perkiraanx,
+                $req->lawanx,
+                $req->keterangan ? $req->keterangan : '', // 10
+                $req->keterangan2 ? $req->keterangan2 : '',
+                $nilaiDibayar,
+                $req->kredit,
+                $req->valas,
+                $req->kurs,
+                $nilaiDibayar * (float) $req->kurs,
+                $req->kreditrp,
+                $req->transaksi,
+                $req->tphc,
+                $req->custsuppP ? $req->custsuppP : '', // 20
+                $req->custsuppL ? $req->custsuppL : '',
+                $req->urut,
+                $req->noaktivaP ? $req->noaktivaP : '',
+                $req->noaktivaL ? $req->noaktivaL : '',
+                $req->statusaktivaP ? $req->statusaktivaP : '',
+                $req->statusaktivaL ? $req->statusaktivaL : '',
+                $req->nobon ? $req->nobon : '',
+                $req->kodedepartemen,
+                $req->kodeP ? $req->kodeP : '',
+                $req->kodeL ? $req->kodeL : '', // 30
+                $req->statusgiro ? $req->statusgiro : '',
+                $req->simbol,
+                $req->kodeperkiraan,
+                $req->flagsimbol ? $req->flagsimbol : '',
+                $req->kodecost ? $req->kodecost : '',
+                $req->kodesubcost ? $req->kodesubcost : '',
+                $req->nodph ?   $req->nodph : '',
+                $d->Urut,
+                $req->dppdph ? $req->dppdph : '', // 40
+                $username,
+                $d->Tp ? $d->Tp : '',
+                $req->ppklx ? $req->ppklx : '',
+                $d->NOFAKTUR ? $d->NOFAKTUR  : '',
+                $plok[0]->IsLokalOrExim,
+                $req->nobons ? $req->nobons : '',
+                $jmlrecord,
+                $req->notitipan ? $req->notitipan : '',
+                $req->uruttitipan,
+                $req->keterangandetail ? $req->keterangandetail : '', // 50
+                $req->pSKB,
+
+            ]);
+
+            $jmlrecord = 1;
+        }
+
+        return 1;
+    }
+
 
 
 

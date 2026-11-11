@@ -203,6 +203,14 @@
   z-index: 50;
 }
 
+/* Pages with a second toolbar row (e.g. type filters under the Export button): both rows
+   share z-index 50, so the LATER row paints on top of the first row's dropdown (the Export
+   menu opens downward into row 2) and swallows its clicks. Drop every later row a notch so
+   the first row's dropdowns stay above it; still above the sticky thead (z-index 20). */
+.tb-report .toolbar + .toolbar {
+  z-index: 49;
+}
+
 .tb-report .page-title {
   font-size: 19px;
   font-weight: 800;
